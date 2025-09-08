@@ -91,7 +91,7 @@ pip install -e ".[aloha, pusht]"
 # Uninstall torchcodec 
 pip uninstall torchcodec
 
-进入 kuavo-data-challenge 项目的根目录
+进入 kuavo_data_challenge 项目的根目录
 pip install -e .
 
 # 安装用于通信的kuavo_humanoid_sdk包，参考链接：

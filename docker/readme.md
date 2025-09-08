@@ -98,7 +98,7 @@ conda pack -n myenv --ignore-missing-files -o myenv.tar.gz
 - 安装 Miniforge3 并配置环境变量。
 
 #### 5. 项目和 Conda 环境
-- 设置工作目录 `/root/kuavo-data-challenge`。
+- 设置工作目录 `/root/kuavo_data_challenge`。
 - 复制项目代码。
 - 解压 Conda Pack 打包的环境 `myenv.tar.gz`。
 - 使用 `conda-unpack` 修复路径。

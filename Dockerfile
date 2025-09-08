@@ -33,7 +33,7 @@ RUN conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pk
     && conda install -y mamba -c conda-forge
 
 # 工作目录
-WORKDIR /root/kuavo-data-challenge
+WORKDIR /root/kuavo_data_challenge
 COPY . .
 
 # 解压 Conda 环境并安装项目
@@ -55,11 +55,11 @@ RUN if [ -f "myenv.tar.gz" ]; then \
 FROM ros:noetic-ros-core-focal
 
 # 设置工作目录
-WORKDIR /root/kuavo-data-challenge
+WORKDIR /root/kuavo_data_challenge
 
 # 复制 Conda 环境和项目代码
 COPY --from=builder /opt/conda /opt/conda
-COPY --from=builder /root/kuavo-data-challenge /root/kuavo-data-challenge
+COPY --from=builder /root/kuavo_data_challenge /root/kuavo_data_challenge
 
 # 环境变量
 ENV PATH="/opt/conda/bin:${PATH}"
@@ -74,7 +74,7 @@ RUN apt-get update && apt-get install -y \
 # 保留 ROS 环境变量
 # 激活 Conda 环境
 RUN echo "source /opt/ros/noetic/setup.bash" >> /root/.bashrc && \
-    echo "source /root/kuavo-data-challenge/myenv/bin/activate" >> /root/.bashrc
+    echo "source /root/kuavo_data_challenge/myenv/bin/activate" >> /root/.bashrc
 
 # 默认命令
 CMD ["bash"]

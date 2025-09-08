@@ -63,23 +63,16 @@ nvidia-smi
 
 #### b. 安装 NVIDIA Container Toolkit
 
+在docker镜像中使用nvidia-smi加速时，需要加载nvidia runtime 库，因此需要安装NVIDIA Container Toolkit
+
 ```bash
 sudo apt install curl
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg \
-  --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L \
-  https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-  | sed 's#deb https://#deb \
-   [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 sudo apt-get update
 export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.17.8-1
-sudo apt-get install -y \
-    nvidia-container-toolkit=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
-    nvidia-container-toolkit-base=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
-    libnvidia-container-tools=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
-    libnvidia-container1=${NVIDIA_CONTAINER_TOOLKIT_VERSION}
+export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.17.8-1 && sudo apt-get install -y nvidia-container-toolkit=${NVIDIA_CONTAINER_TOOLKIT_VERSION} nvidia-container-toolkit-base=${NVIDIA_CONTAINER_TOOLKIT_VERSION} libnvidia-container-tools=${NVIDIA_CONTAINER_TOOLKIT_VERSION} libnvidia-container1=${NVIDIA_CONTAINER_TOOLKIT_VERSION}
 ```
+
 
 #### c. 安装 Docker
 
@@ -87,7 +80,7 @@ sudo apt-get install -y \
 sudo apt update
 sudo apt install git
 sudo apt install docker.io
-# 配置 NVIDIA Runtime
+# 配置docker中的 NVIDIA Runtime
 nvidia-ctk
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
@@ -206,10 +199,20 @@ RUN rosdep init
 sudo docker build -t ubt2004_ros_noetic .
 ```
 
-构建完成后进入镜像即可：
+构建完成后进入镜像即可，初次启动容器加载镜像：
 
 ```shell
 sudo docker run -it --name ubuntu_ros_container ubt2004_ros_noetic /bin/bash
+# 或 GPU 启动（推荐）
+sudo docker run -it --gpus all --runtime nvidia --name ubuntu_ros_container ubt2004_ros_noetic /bin/bash
+# 可选，挂载本地目录路径等
+# sudo docker run -it --gpus all --runtime nvidia --name ubuntu_ros_container -v /path/to/your/code:/root/code ubt2004_ros_noetic /bin/bash
+```
+
+之后每次加载：
+```shell
+sudo docker start ubuntu_ros_container
+sudo docker exec -it ubuntu_ros_container /bin/bash
 ```
 
 进入镜像后，初始化ros环境变量，然后启动roscore
@@ -415,7 +418,7 @@ outputs/
 ## 📂 核心代码结构
 
 ```
-KUAVO-DATA-CHALLENGE/
+KUAVO_DATA_CHALLENGE/
 ├── configs/                # 配置文件
 ├── kuavo_data/             # 数据处理转换模块
 ├── kuavo_deploy/           # 部署脚本（模拟器/真机）
