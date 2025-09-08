@@ -170,6 +170,12 @@ vim Dockerfile
 
 ```Dockerfile
 FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' /etc/apt/sources.list && \
+    sed -i 's|http://security.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' /etc/apt/sources.list
+
 RUN apt-get update && apt-get install -y locales tzdata gnupg lsb-release
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
@@ -181,9 +187,15 @@ RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main"
 RUN apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
 
 # 安装ROS Noetic
-RUN apt-get update && apt-get install -y ros-noetic-desktop-full
-
-RUN apt-get install python-rosdep python-rosinstall python-rosinstall-generator python-wstool build-essential
+# 设置键盘布局为 Chinese
+RUN apt-get update && \
+    apt-get install -y keyboard-configuration apt-utils && \
+    echo 'keyboard-configuration keyboard-configuration/layoutcode string cn' | debconf-set-selections && \
+    echo 'keyboard-configuration keyboard-configuration/modelcode string pc105' | debconf-set-selections && \
+    echo 'keyboard-configuration keyboard-configuration/variant string ' | debconf-set-selections && \
+    apt-get install -y ros-noetic-desktop-full && \
+    apt-get install -y python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
 # 初始化rosdep
 RUN rosdep init
@@ -194,7 +206,21 @@ RUN rosdep init
 sudo docker build -t ubt2004_ros_noetic .
 ```
 
-构建完成后进入镜像即可。
+构建完成后进入镜像即可：
+
+```shell
+sudo docker run -it --name ubuntu_ros_container ubt2004_ros_noetic /bin/bash
+```
+
+进入镜像后，初始化ros环境变量，然后启动roscore
+
+```shell
+source /opt/ros/noetic/setup.bash
+roscore
+```
+
+无误的话，ubuntu20.04 + ros noetic的docker配置方式就结束了。
+
 </details>
 
 <br>
@@ -206,16 +232,16 @@ sudo docker build -t ubt2004_ros_noetic .
 
 ```bash
 # SSH
-git clone --depth=1 git@github.com:LejuRobotics/kuavo-data-challenge.git
-
+git clone --depth=1 git@github.com:LejuRobotics/kuavo_data_challenge.git
+# 或者
 # HTTPS
-git clone --depth=1 https://github.com/LejuRobotics/kuavo-data-challenge.git
-```
+git clone --depth=1 https://github.com/LejuRobotics/kuavo_data_challenge.git
+
 
 更新third_party下的lerobot子模块：
 
 ```bash
-cd kuavo-data-challenge
+cd kuavo_data_challenge
 git submodule init
 git submodule update --recursive
 ```
@@ -243,7 +269,7 @@ source kdc/bin/activate
 ```bash
 pip install -r requirements_ilcode.txt   # 无需ROS Noetic，但只能使用kuavo_train模仿学习训练代码，kuavo_data（数转）及 kuavo_deploy（部署代码）均依赖ROS
 # 或
-pip install -r requirements_total.txt    # 需确保 ROS Noetic 已安装
+pip install -r requirements_total.txt    # 需确保 ROS Noetic 已安装 (推荐)
 ```
 
 如果运行时报ffmpeg或torchcodec的错：
