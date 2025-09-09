@@ -260,10 +260,16 @@ conda create -n kdc python=3.10
 conda activate kdc
 ```
 
-或：
+或：先安装python3.10，再使用venv创建虚拟环境
 
 ```bash
-python -m venv kdc
+sudo apt update
+sudo apt install -y software-properties-common
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.10 python3.10-venv python3.10-dev
+
+python3.10 -m venv kdc
 source kdc/bin/activate
 ```
 
