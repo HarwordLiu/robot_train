@@ -273,9 +273,24 @@ python3.10 -m venv kdc
 source kdc/bin/activate
 ```
 
+查看和确保安装正确：
+```shell
+python  # 查看python版本，看到确认输出为3.10.xxx（通常是3.10.18）
+# 输出示例：
+# Python 3.10.18 (main, Jun  5 2025, 13:14:17) [GCC 11.2.0] on linux
+# Type "help", "copyright", "credits" or "license" for more information.
+# >>> 
+
+pip --version # 查看pip对应的版本，看到确认输出为3.10的pip
+# 输出示例：pip 25.1 from /path/to/your/env/python3.10/site-packages/pip (python 3.10)
+```
+
+
 安装依赖：
 
 ```bash
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple  # 建议首先换源，能加快下载安装速度
+
 pip install -r requirements_ilcode.txt   # 无需ROS Noetic，但只能使用kuavo_train模仿学习训练代码，kuavo_data（数转）及 kuavo_deploy（部署代码）均依赖ROS
 # 或
 pip install -r requirements_total.txt    # 需确保 ROS Noetic 已安装 (推荐)

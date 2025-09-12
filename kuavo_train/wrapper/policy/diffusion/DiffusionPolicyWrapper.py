@@ -77,6 +77,8 @@ class CustomDiffusionPolicyWrapper(DiffusionPolicy):
         if ACTION in batch:
             batch.pop(ACTION)
 
+        batch = self.normalize_inputs(batch)
+
         random_crop = self.config.crop_is_random and self.training
         crop_position = None
         if self.config.image_features:
@@ -96,7 +98,6 @@ class CustomDiffusionPolicyWrapper(DiffusionPolicy):
                 batch[key] = resize_image(batch[key],target_size=self.config.resize_shape, image_type="depth")
             batch[OBS_DEPTH] = torch.stack([batch[key] for key in self.config.depth_features], dim=-4)
 
-        batch = self.normalize_inputs(batch)
         # NOTE: It's important that this happens after stacking the images into a single key.
         self._queues = populate_queues(self._queues, batch)
 
