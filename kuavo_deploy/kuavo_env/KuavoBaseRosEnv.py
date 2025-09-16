@@ -11,7 +11,8 @@ import gymnasium as gym
 import time
 from configs.deploy.config_kuavo_env import load_kuavo_env_config
 import sys
-from kuavo_humanoid_sdk import KuavoSDK,KuavoRobot,KuavoRobotState,LejuClaw,DexterousHand
+from kuavo_humanoid_sdk import KuavoSDK,KuavoRobot,KuavoRobotState,DexterousHand
+from kuavo_humanoid_sdk.msg.kuavo_msgs.msg import lejuClawCommand
 from kuavo_deploy.utils.logging_utils import setup_logger
 
 import traceback
@@ -279,19 +280,22 @@ class KuavoBaseRosEnv(gym.Env):
                     target_positions = [0,100,0,0,0,0,0,100,0,0,0,0]
                     self.qiangnao.control(target_positions=target_positions, target_velocities=None, target_torques=None)
                 elif self.eef_type == 'leju_claw':
-                    raise KeyError("leju_claw is not supported!")
+                    target_positions = [0,0]
+                    self.lejuclaw.control(target_positions=target_positions, target_velocities=None, target_torques=None)
             elif self.which_arm == 'left':
                 if self.eef_type == 'qiangnao':
                     target_positions = [0,100,0,0,0,0]
                     self.qiangnao.control_left(target_positions=target_positions, target_velocities=None, target_torques=None)
                 elif self.eef_type == 'leju_claw':
-                    raise KeyError("leju_claw is not supported!")
+                    target_positions = [0]
+                    self.lejuclaw.control_left(target_positions=target_positions, target_velocities=None, target_torques=None)
             elif self.which_arm == 'right':
                 if self.eef_type == 'qiangnao':
                     target_positions = [0,100,0,0,0,0]
                     self.qiangnao.control_right(target_positions=target_positions, target_velocities=None, target_torques=None)
                 elif self.eef_type == 'leju_claw':
-                    raise KeyError("leju_claw is not supported!")
+                    target_positions = [0]
+                    self.lejuclaw.control_right(target_positions=target_positions, target_velocities=None, target_torques=None)
             else:
                 raise KeyError("which_arm != 'left' or 'right' or 'both' is not supported!")
 
@@ -621,6 +625,63 @@ class KuavoBaseRosEnv(gym.Env):
             raise KeyError("only_arm = False is not supported!")
         
         self.state = output_state
+
+class LejuClaw():
+    def __init__(self):
+        self._pub_leju_claw_cmd = rospy.Publisher('/leju_claw_command', lejuClawCommand, queue_size=10)
+
+    def control(self, target_positions:list, target_velocities:list=None, target_torques:list=None):
+        assert len(target_positions) == 2, "target_positions must be a list of length 2"
+        assert target_velocities is None or len(target_velocities) == 2, "target_velocities must be a list of length 2"
+        assert target_torques is None or len(target_torques) == 2, "target_torques must be a list of length 2"
+
+        cmd = lejuClawCommand()
+        cmd.data.name = ['left_claw','right_claw']
+        target_positions = [max(0.0, min(100.0, pos)) for pos in target_positions]
+        if target_velocities is None:
+            target_velocities = [90, 90]
+        else:
+           target_velocities = [max(0.0, min(100.0, vel)) for vel in target_velocities]
+        
+        if target_torques is None:
+            target_torques = [1.0, 1.0]
+        else:
+            target_torques = [max(0.0, min(10.0, torque)) for torque in target_torques]
+        cmd.data.position = target_positions
+        cmd.data.velocity = target_velocities
+        cmd.data.effort = target_torques
+        self._pub_leju_claw_cmd.publish(cmd)
+
+    def control_left(self, target_positions:list, target_velocities:list=None, target_torques:list=None):
+        assert len(target_positions) == 1, "target_positions must be a list of length 1"
+        assert target_velocities is None or len(target_velocities) == 1, "target_velocities must be a list of length 1"
+        assert target_torques is None or len(target_torques) == 1, "target_torques must be a list of length 1"
+
+        if target_velocities is None:
+            target_velocities = [90]
+        if target_torques is None:
+            target_torques = [1.0]
+        
+        target_positions = [target_positions[0],0]
+        target_velocities = [target_velocities[0],0]
+        target_torques = [target_torques[0],0]
+        self.control(target_positions, target_velocities, target_torques)
+    
+    def control_right(self, target_positions:list, target_velocities:list=None, target_torques:list=None):
+        assert len(target_positions) == 1, "target_positions must be a list of length 1"
+        assert target_velocities is None or len(target_velocities) == 1, "target_velocities must be a list of length 1"
+        assert target_torques is None or len(target_torques) == 1, "target_torques must be a list of length 1"
+
+        if target_velocities is None:
+            target_velocities = [90]
+        if target_torques is None:
+            target_torques = [1.0]
+
+        target_positions = [0,target_positions[0]]
+        target_velocities = [0,target_velocities[0]]
+        target_torques = [0,target_torques[0]]
+        self.control(target_positions, target_velocities, target_torques)
+        
 
 # Usage example
 if __name__ == "__main__":
