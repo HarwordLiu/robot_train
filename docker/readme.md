@@ -50,16 +50,22 @@ sudo systemctl status docker
 
 ## 2️⃣ 使用 Conda Pack 打包环境
 
-1. 假设你已有 Conda 环境 `myenv`：
+1. 安装 conda-pack
 
 ```bash
-conda activate myenv
+conda install -c conda-forge conda-pack
 ```
 
-2. 打包环境：
+2. 假设你已有 Conda 环境 `kdc`：
 
 ```bash
-conda pack -n myenv -o myenv.tar.gz
+conda activate kdc
+```
+
+3. 打包环境：
+
+```bash
+conda pack -n kdc -o myenv.tar.gz
 ```
 
 ⚠️ 注意：
@@ -67,10 +73,10 @@ conda pack -n myenv -o myenv.tar.gz
 - 示例：
 
 ```bash
-conda pack -n myenv --ignore-missing-files -o myenv.tar.gz
+conda pack -n kdc --ignore-missing-files -o myenv.tar.gz
 ```
 
-3. 将打包好的环境压缩包myenv.tar.gz放在项目根目录下
+4. 将打包好的环境压缩包 myenv.tar.gz 放在项目根目录下
 
 ---
 
