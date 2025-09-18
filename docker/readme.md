@@ -76,6 +76,9 @@ conda pack -n myenv --ignore-missing-files -o myenv.tar.gz
 
 ## 3️⃣ Dockerfile 构建项目镜像
 
+⚠️ 注意：
+- 请确保你的outputs文件夹里只有一组你要上传测试的模型文件及其配置文件，避免打包得到的 docker 镜像体积过大
+
 ### 下面提供一个 **Dockerfile的可用示例**：
 
 [Dockerfile可用示例](../Dockerfile)
