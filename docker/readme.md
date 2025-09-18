@@ -73,7 +73,7 @@ conda pack -n kdc -o myenv.tar.gz
 - 示例：
 
 ```bash
-conda pack -n kdc --ignore-missing-files -o myenv.tar.gz
+conda pack -n kdc --ignore-editable-packages -o myenv.tar.gz
 ```
 
 4. 将打包好的环境压缩包 myenv.tar.gz 放在项目根目录下
