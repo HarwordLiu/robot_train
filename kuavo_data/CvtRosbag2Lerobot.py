@@ -98,6 +98,7 @@ import tqdm
 import json
 
 import common.kuavo_dataset as kuavo
+import glob
 
 
 @dataclasses.dataclass(frozen=True)
@@ -109,6 +110,67 @@ class DatasetConfig:
     video_backend: str | None = None
 
 DEFAULT_DATASET_CONFIG = DatasetConfig()
+
+
+def clear_episode_range(dataset_root: Path, repo_id: str, start_idx: int, end_idx: int):
+    """
+    清除指定范围内的episode数据文件
+
+    Args:
+        dataset_root: 数据集根目录路径
+        repo_id: 数据集仓库ID
+        start_idx: 起始episode索引
+        end_idx: 结束episode索引
+    """
+    dataset_path = Path(dataset_root) / repo_id
+    if not dataset_path.exists():
+        log_print.info(f"Dataset path {dataset_path} does not exist, skipping range clearing")
+        return
+
+    log_print.info(f"Clearing episodes {start_idx} to {end_idx} from {dataset_path}")
+
+    # 清除数据文件 (parquet格式: data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet)
+    data_dir = dataset_path / "data"
+    if data_dir.exists():
+        for ep_idx in range(start_idx, end_idx + 1):
+            # 计算chunk编号 (假设每个chunk包含1000个episode)
+            episode_chunk = ep_idx // 1000
+            episode_file = data_dir / f"chunk-{episode_chunk:03d}" / f"episode_{ep_idx:06d}.parquet"
+            if episode_file.exists():
+                episode_file.unlink()
+                log_print.info(f"Removed episode file: {episode_file}")
+
+            # 清除对应的视频文件
+            videos_dir = dataset_path / "videos"
+            if videos_dir.exists():
+                episode_video_pattern = f"episode_{ep_idx:06d}_*.mp4"
+                for video_file in videos_dir.glob(f"**/{episode_video_pattern}"):
+                    video_file.unlink()
+                    log_print.info(f"Removed video file: {video_file}")
+
+    # 清除空的chunk目录
+    if data_dir.exists():
+        for chunk_dir in data_dir.glob("chunk-*"):
+            if chunk_dir.is_dir() and not any(chunk_dir.iterdir()):
+                chunk_dir.rmdir()
+                log_print.info(f"Removed empty chunk directory: {chunk_dir}")
+
+    log_print.info(f"Finished clearing episodes {start_idx} to {end_idx}")
+
+
+def clear_all_dataset(dataset_root: Path, repo_id: str):
+    """
+    完全清除数据集
+
+    Args:
+        dataset_root: 数据集根目录路径
+        repo_id: 数据集仓库ID
+    """
+    dataset_path = Path(dataset_root) / repo_id
+    if dataset_path.exists():
+        log_print.info(f"Clearing entire dataset: {dataset_path}")
+        shutil.rmtree(dataset_path)
+        log_print.info("Dataset cleared successfully")
 
 
 def get_cameras(bag_data: dict) -> list[str]:
@@ -133,6 +195,7 @@ def create_empty_dataset(
     has_effort: bool = False,
     dataset_config: DatasetConfig = DEFAULT_DATASET_CONFIG,
     root: str,
+    clear_dataset: bool = True,
 ) -> LeRobotDataset:
     
     # 根据config的参数决定是否为半身和末端的关节类型
@@ -197,7 +260,7 @@ def create_empty_dataset(
                 ],
             }
 
-    if Path(LEROBOT_HOME / repo_id).exists():
+    if clear_dataset and Path(LEROBOT_HOME / repo_id).exists():
         shutil.rmtree(LEROBOT_HOME / repo_id)
 
     return LeRobotDataset.create(
@@ -263,14 +326,17 @@ def populate_dataset(
     bag_files: list[Path],
     task: str,
     episodes: list[int] | None = None,
+    episode_start_idx: int = 0,
 ) -> LeRobotDataset:
     if episodes is None:
         episodes = range(len(bag_files))
     failed_bags = []
-    for ep_idx in tqdm.tqdm(episodes):
+    for i, ep_idx in enumerate(tqdm.tqdm(episodes)):
         ep_path = bag_files[ep_idx]
+        # 计算实际的episode索引
+        actual_episode_idx = episode_start_idx + i
         from termcolor import colored
-        print(colored(f"Processing {ep_path}", "yellow", attrs=["bold"]))
+        print(colored(f"Processing {ep_path} -> Episode {actual_episode_idx}", "yellow", attrs=["bold"]))
         # 默认读取所有的数据如果话题不存在相应的数值应该是一个空的数据
         try:
             imgs_per_cam, state, action, velocity, effort ,claw_state, claw_action,qiangnao_state,qiangnao_action, rq2f85_state, rq2f85_action = load_raw_episode_data(ep_path)
@@ -326,7 +392,10 @@ def populate_dataset(
 
             delta_action = action-state
             action = delta_action
-        
+
+        # 为当前episode创建新的buffer并指定episode索引
+        dataset.episode_buffer = dataset.create_episode_buffer(episode_index=actual_episode_idx)
+
         num_frames = state.shape[0]
         for i in range(num_frames):
             if kuavo.ONLY_HALF_UP_BODY:
@@ -475,38 +544,64 @@ def port_kuavo_rosbag(
     dataset_config: DatasetConfig = DEFAULT_DATASET_CONFIG,
     root: str,
     n: int | None = None,
+    episode_range: list[int] | None = None,
+    clear_dataset: bool = True,
 ):
-    # Download raw data if not exists
-    if (LEROBOT_HOME / repo_id).exists():
-        shutil.rmtree(LEROBOT_HOME / repo_id)
+    # 根据配置决定是否清理数据
+    dataset_root = Path(root)
+
+    if episode_range is not None:
+        # 清理指定范围的episode数据
+        start_idx, end_idx = episode_range
+        clear_episode_range(dataset_root, repo_id.split('/')[-1], start_idx, end_idx)
+    elif clear_dataset:
+        # 完全清理数据集
+        clear_all_dataset(dataset_root, repo_id.split('/')[-1])
 
     bag_reader = kuavo.KuavoRosbagReader()
     bag_files = bag_reader.list_bag_files(raw_dir)
-    
-    if isinstance(n, int) and n > 0:
+
+    # 处理episode范围或bag文件数量限制
+    episode_start_idx = 0
+    if episode_range is not None:
+        start_idx, end_idx = episode_range
+        episode_start_idx = start_idx
+        # 选择对应范围的bag文件
+        num_episodes = end_idx - start_idx + 1
+        if len(bag_files) < num_episodes:
+            log_print.warning(f"Warning: Requested {num_episodes} episodes, but only {len(bag_files)} bag files are available.")
+            num_episodes = len(bag_files)
+        bag_files = bag_files[:num_episodes]
+        episodes = list(range(num_episodes))
+    elif isinstance(n, int) and n > 0:
         num_available_bags = len(bag_files)
         if n > num_available_bags:
             log_print.warning(f"Warning: Requested {n} bags, but only {num_available_bags} are available. Using all available bags.")
             n = num_available_bags
-        
+
         # random sample num_of_bag files
         select_idx = np.random.choice(num_available_bags, n, replace=False)
         bag_files = [bag_files[i] for i in select_idx]
+        episodes = None
+    else:
+        episodes = None
     
-    dataset = create_empty_dataset( 
+    dataset = create_empty_dataset(
         repo_id,
         robot_type="kuavo4pro",
         mode=mode,
         has_effort=False,
         has_velocity=False,
         dataset_config=dataset_config,
-        root = root,
+        root=root,
+        clear_dataset=False,  # 数据清理在函数开始时已处理
     )
     dataset = populate_dataset(
         dataset,
         bag_files,
         task=task,
         episodes=episodes,
+        episode_start_idx=episode_start_idx,
     )
     # dataset.consolidate()
     
@@ -519,12 +614,14 @@ def main(cfg: DictConfig):
     n = cfg.rosbag.num_used
     raw_dir = cfg.rosbag.rosbag_dir
     version = cfg.rosbag.lerobot_dir
+    episode_range = cfg.rosbag.episode_range
 
     task_name = os.path.basename(raw_dir)
     repo_id = f'lerobot/{task_name}'
     lerobot_dir = os.path.join(raw_dir,"../",version,"lerobot")
-    if os.path.exists(lerobot_dir):
-        shutil.rmtree(lerobot_dir)
+
+    # 根据episode_range决定清理策略
+    clear_dataset = episode_range is None
     
     half_arm = len(kuavo.DEFAULT_ARM_JOINT_NAMES) // 2
     half_claw = len(kuavo.DEFAULT_LEJUCLAW_JOINT_NAMES) // 2
@@ -555,7 +652,15 @@ def main(cfg: DictConfig):
                                     + kuavo.DEFAULT_ARM_JOINT_NAMES[half_arm:] + kuavo.DEFAULT_DEXHAND_JOINT_NAMES[half_dexhand:]             
         DEFAULT_JOINT_NAMES_LIST = kuavo.DEFAULT_LEG_JOINT_NAMES + DEFAULT_ARM_JOINT_NAMES + kuavo.DEFAULT_HEAD_JOINT_NAMES
 
-    port_kuavo_rosbag(raw_dir, repo_id, root=lerobot_dir,n = n, task=kuavo.TASK_DESCRIPTION)
+    port_kuavo_rosbag(
+        raw_dir,
+        repo_id,
+        root=lerobot_dir,
+        n=n,
+        task=kuavo.TASK_DESCRIPTION,
+        episode_range=episode_range,
+        clear_dataset=clear_dataset
+    )
 
 if __name__ == "__main__":
     
