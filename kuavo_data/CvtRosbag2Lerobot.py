@@ -146,13 +146,23 @@ def clear_episode_range(dataset_path: Path, start_idx: int, end_idx: int):
                     video_file.unlink()
                     log_print.info(f"Removed video file: {video_file}")
 
-            # 清除对应的图像文件
+            # 清除对应的图像文件 (格式: images/{image_key}/episode_{episode_index:06d}/frame_{frame_index:06d}.png)
             images_dir = dataset_path / "images"
             if images_dir.exists():
-                episode_image_pattern = f"episode_{ep_idx:06d}_*.png"
-                for image_file in images_dir.glob(f"**/{episode_image_pattern}"):
-                    image_file.unlink()
-                    log_print.info(f"Removed image file: {image_file}")
+                episode_dir_pattern = f"episode_{ep_idx:06d}"
+                # 遍历所有camera/image_key目录
+                for image_key_dir in images_dir.iterdir():
+                    if image_key_dir.is_dir():
+                        episode_image_dir = image_key_dir / episode_dir_pattern
+                        if episode_image_dir.exists():
+                            # 删除该episode的所有图像文件
+                            for image_file in episode_image_dir.glob("frame_*.png"):
+                                image_file.unlink()
+                                log_print.info(f"Removed image file: {image_file}")
+                            # 删除空的episode目录
+                            if not any(episode_image_dir.iterdir()):
+                                episode_image_dir.rmdir()
+                                log_print.info(f"Removed empty episode directory: {episode_image_dir}")
 
     # 清除空的chunk目录
     if data_dir.exists():
@@ -217,21 +227,70 @@ def _update_meta_files(dataset_path: Path, start_idx: int, end_idx: int):
                 f.write(line + '\n')
         log_print.info(f"Updated episodes_stats.jsonl, removed {end_idx - start_idx + 1} episode stats records")
 
-    # 更新 info.json 中的总episode数
+    # 更新 info.json 中的总episode数和帧数
     info_file = meta_dir / "info.json"
     if info_file.exists():
         log_print.info("Updating info.json")
         with open(info_file, 'r') as f:
             info_data = json.load(f)
 
-        # 减少总episode数
+        # 计算被删除的episodes的总帧数和任务数
+        removed_frames = 0
+        removed_tasks = set()
+        episodes_stats_file = meta_dir / "episodes_stats.jsonl"
+        if episodes_stats_file.exists():
+            with open(episodes_stats_file, 'r') as f:
+                for line in f:
+                    stats_data = json.loads(line.strip())
+                    episode_idx = stats_data.get('episode_index', -1)
+                    if start_idx <= episode_idx <= end_idx:
+                        removed_frames += stats_data.get('length', 0)
+                        # 收集被删除episodes的任务类型
+                        task = stats_data.get('task', None)
+                        if task:
+                            removed_tasks.add(task)
+
+        # 计算删除后剩余的任务数
+        remaining_tasks = set()
+        if episodes_stats_file.exists():
+            with open(episodes_stats_file, 'r') as f:
+                for line in f:
+                    stats_data = json.loads(line.strip())
+                    episode_idx = stats_data.get('episode_index', -1)
+                    if not (start_idx <= episode_idx <= end_idx):  # 保留的episodes
+                        task = stats_data.get('task', None)
+                        if task:
+                            remaining_tasks.add(task)
+
+        removed_count = end_idx - start_idx + 1
+
+        # 更新total_episodes
         if 'total_episodes' in info_data:
-            removed_count = end_idx - start_idx + 1
             info_data['total_episodes'] = max(0, info_data['total_episodes'] - removed_count)
             log_print.info(f"Updated total_episodes: reduced by {removed_count}")
 
-        # 更新总帧数等其他信息（如果需要的话）
-        # 注意：这里可能需要更复杂的逻辑来正确更新total_frames等字段
+        # 更新total_frames
+        if 'total_frames' in info_data:
+            info_data['total_frames'] = max(0, info_data['total_frames'] - removed_frames)
+            log_print.info(f"Updated total_frames: reduced by {removed_frames}")
+
+        # 更新total_tasks
+        if 'total_tasks' in info_data:
+            info_data['total_tasks'] = len(remaining_tasks)
+            log_print.info(f"Updated total_tasks: now {info_data['total_tasks']}")
+
+        # 更新total_chunks (基于剩余的episodes计算)
+        if 'total_episodes' in info_data and 'chunks_size' in info_data:
+            chunks_size = info_data.get('chunks_size', 1000)
+            total_episodes = info_data['total_episodes']
+            info_data['total_chunks'] = (total_episodes + chunks_size - 1) // chunks_size if total_episodes > 0 else 0
+            log_print.info(f"Updated total_chunks: now {info_data['total_chunks']}")
+
+        # 更新total_videos (如果使用视频)
+        if 'total_videos' in info_data and 'video_path' in info_data and info_data['video_path']:
+            # 对于kuavo数据集，每个frame都有对应的视频帧，所以total_videos等于total_frames
+            info_data['total_videos'] = info_data.get('total_frames', 0)
+            log_print.info(f"Updated total_videos: now {info_data['total_videos']}")
 
         with open(info_file, 'w') as f:
             json.dump(info_data, f, indent=2)
@@ -352,7 +411,6 @@ def create_empty_dataset(
         image_writer_threads=dataset_config.image_writer_threads,
         video_backend=dataset_config.video_backend,
         root=root,
-        exist_ok=True,
     )
 
 def load_raw_images_per_camera(bag_data: dict) -> dict[str, np.ndarray]:
