@@ -112,17 +112,15 @@ class DatasetConfig:
 DEFAULT_DATASET_CONFIG = DatasetConfig()
 
 
-def clear_episode_range(dataset_root: Path, repo_id: str, start_idx: int, end_idx: int):
+def clear_episode_range(dataset_path: Path, start_idx: int, end_idx: int):
     """
     清除指定范围内的episode数据文件
 
     Args:
-        dataset_root: 数据集根目录路径
-        repo_id: 数据集仓库ID
+        dataset_path: 数据集目录路径
         start_idx: 起始episode索引
         end_idx: 结束episode索引
     """
-    dataset_path = Path(dataset_root) / repo_id
     if not dataset_path.exists():
         log_print.info(f"Dataset path {dataset_path} does not exist, skipping range clearing")
         return
@@ -158,15 +156,13 @@ def clear_episode_range(dataset_root: Path, repo_id: str, start_idx: int, end_id
     log_print.info(f"Finished clearing episodes {start_idx} to {end_idx}")
 
 
-def clear_all_dataset(dataset_root: Path, repo_id: str):
+def clear_all_dataset(dataset_path: Path):
     """
     完全清除数据集
 
     Args:
-        dataset_root: 数据集根目录路径
-        repo_id: 数据集仓库ID
+        dataset_path: 数据集目录路径
     """
-    dataset_path = Path(dataset_root) / repo_id
     if dataset_path.exists():
         log_print.info(f"Clearing entire dataset: {dataset_path}")
         shutil.rmtree(dataset_path)
@@ -548,15 +544,15 @@ def port_kuavo_rosbag(
     clear_dataset: bool = True,
 ):
     # 根据配置决定是否清理数据
-    dataset_root = Path(root)
+    dataset_path = Path(root)
 
     if episode_range is not None:
         # 清理指定范围的episode数据
         start_idx, end_idx = episode_range
-        clear_episode_range(dataset_root, repo_id.split('/')[-1], start_idx, end_idx)
+        clear_episode_range(dataset_path, start_idx, end_idx)
     elif clear_dataset:
         # 完全清理数据集
-        clear_all_dataset(dataset_root, repo_id.split('/')[-1])
+        clear_all_dataset(dataset_path)
 
     bag_reader = kuavo.KuavoRosbagReader()
     bag_files = bag_reader.list_bag_files(raw_dir)
