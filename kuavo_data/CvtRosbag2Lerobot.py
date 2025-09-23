@@ -231,8 +231,13 @@ def _update_meta_files(dataset_path: Path, start_idx: int, end_idx: int):
     info_file = meta_dir / "info.json"
     if info_file.exists():
         log_print.info("Updating info.json")
-        with open(info_file, 'r') as f:
-            info_data = json.load(f)
+        try:
+            with open(info_file, 'r') as f:
+                info_data = json.load(f)
+        except json.JSONDecodeError as e:
+            log_print.error(f"Error reading info.json: {e}")
+            log_print.error("info.json file appears to be corrupted. Skipping info.json update.")
+            return
 
         # 计算被删除的episodes的总帧数和任务数
         removed_frames = 0
@@ -292,9 +297,13 @@ def _update_meta_files(dataset_path: Path, start_idx: int, end_idx: int):
             info_data['total_videos'] = info_data.get('total_frames', 0)
             log_print.info(f"Updated total_videos: now {info_data['total_videos']}")
 
-        with open(info_file, 'w') as f:
-            json.dump(info_data, f, indent=2)
-        log_print.info("Updated info.json")
+        try:
+            with open(info_file, 'w') as f:
+                json.dump(info_data, f, indent=2)
+            log_print.info("Updated info.json")
+        except Exception as e:
+            log_print.error(f"Error writing info.json: {e}")
+            log_print.error("Failed to update info.json")
 
 
 def clear_all_dataset(dataset_path: Path):
