@@ -352,6 +352,7 @@ def create_empty_dataset(
         image_writer_threads=dataset_config.image_writer_threads,
         video_backend=dataset_config.video_backend,
         root=root,
+        exist_ok=True,
     )
 
 def load_raw_images_per_camera(bag_data: dict) -> dict[str, np.ndarray]:

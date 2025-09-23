@@ -19,7 +19,7 @@ dataset:
   use_depth: true # 是否需要深度图像数据，与上面手臂保持一致的深度数据
   depth_range: [0, 1000] # 深度图的裁剪范围，单位：毫米
 
-  task_description: 'Task1-TargetPlacement' # 任务描述，自定义
+  task_description: 'Pick and Place' # 任务描述，自定义
 
   train_hz: 10 # 训练数据的采样频率
   main_timeline: head_cam_h #将哪个相机设为主相机，默认主相机来自：head_cam_h, 可选：wrist_cam_l, wrist_cam_r
