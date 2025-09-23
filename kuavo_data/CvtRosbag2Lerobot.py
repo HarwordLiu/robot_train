@@ -114,7 +114,7 @@ DEFAULT_DATASET_CONFIG = DatasetConfig()
 
 def clear_episode_range(dataset_path: Path, start_idx: int, end_idx: int):
     """
-    清除指定范围内的episode数据文件
+    清除指定范围内的episode数据文件和元数据
 
     Args:
         dataset_path: 数据集目录路径
@@ -146,6 +146,14 @@ def clear_episode_range(dataset_path: Path, start_idx: int, end_idx: int):
                     video_file.unlink()
                     log_print.info(f"Removed video file: {video_file}")
 
+            # 清除对应的图像文件
+            images_dir = dataset_path / "images"
+            if images_dir.exists():
+                episode_image_pattern = f"episode_{ep_idx:06d}_*.png"
+                for image_file in images_dir.glob(f"**/{episode_image_pattern}"):
+                    image_file.unlink()
+                    log_print.info(f"Removed image file: {image_file}")
+
     # 清除空的chunk目录
     if data_dir.exists():
         for chunk_dir in data_dir.glob("chunk-*"):
@@ -153,7 +161,81 @@ def clear_episode_range(dataset_path: Path, start_idx: int, end_idx: int):
                 chunk_dir.rmdir()
                 log_print.info(f"Removed empty chunk directory: {chunk_dir}")
 
+    # 更新meta文件
+    _update_meta_files(dataset_path, start_idx, end_idx)
+
     log_print.info(f"Finished clearing episodes {start_idx} to {end_idx}")
+
+
+def _update_meta_files(dataset_path: Path, start_idx: int, end_idx: int):
+    """
+    更新meta目录中的元数据文件，移除指定范围的episode记录
+
+    Args:
+        dataset_path: 数据集目录路径
+        start_idx: 起始episode索引
+        end_idx: 结束episode索引
+    """
+    meta_dir = dataset_path / "meta"
+    if not meta_dir.exists():
+        log_print.info("Meta directory does not exist, skipping meta file updates")
+        return
+
+    # 更新 episodes.jsonl
+    episodes_file = meta_dir / "episodes.jsonl"
+    if episodes_file.exists():
+        log_print.info("Updating episodes.jsonl")
+        lines = []
+        with open(episodes_file, 'r') as f:
+            for line in f:
+                episode_data = json.loads(line.strip())
+                # 保留不在删除范围内的episode记录
+                if not (start_idx <= episode_data.get('episode_index', -1) <= end_idx):
+                    lines.append(line.strip())
+
+        # 重写文件
+        with open(episodes_file, 'w') as f:
+            for line in lines:
+                f.write(line + '\n')
+        log_print.info(f"Updated episodes.jsonl, removed {end_idx - start_idx + 1} episode records")
+
+    # 更新 episodes_stats.jsonl
+    episodes_stats_file = meta_dir / "episodes_stats.jsonl"
+    if episodes_stats_file.exists():
+        log_print.info("Updating episodes_stats.jsonl")
+        lines = []
+        with open(episodes_stats_file, 'r') as f:
+            for line in f:
+                stats_data = json.loads(line.strip())
+                # 保留不在删除范围内的episode统计记录
+                if not (start_idx <= stats_data.get('episode_index', -1) <= end_idx):
+                    lines.append(line.strip())
+
+        # 重写文件
+        with open(episodes_stats_file, 'w') as f:
+            for line in lines:
+                f.write(line + '\n')
+        log_print.info(f"Updated episodes_stats.jsonl, removed {end_idx - start_idx + 1} episode stats records")
+
+    # 更新 info.json 中的总episode数
+    info_file = meta_dir / "info.json"
+    if info_file.exists():
+        log_print.info("Updating info.json")
+        with open(info_file, 'r') as f:
+            info_data = json.load(f)
+
+        # 减少总episode数
+        if 'total_episodes' in info_data:
+            removed_count = end_idx - start_idx + 1
+            info_data['total_episodes'] = max(0, info_data['total_episodes'] - removed_count)
+            log_print.info(f"Updated total_episodes: reduced by {removed_count}")
+
+        # 更新总帧数等其他信息（如果需要的话）
+        # 注意：这里可能需要更复杂的逻辑来正确更新total_frames等字段
+
+        with open(info_file, 'w') as f:
+            json.dump(info_data, f, indent=2)
+        log_print.info("Updated info.json")
 
 
 def clear_all_dataset(dataset_path: Path):
@@ -582,16 +664,37 @@ def port_kuavo_rosbag(
     else:
         episodes = None
     
-    dataset = create_empty_dataset(
-        repo_id,
-        robot_type="kuavo4pro",
-        mode=mode,
-        has_effort=False,
-        has_velocity=False,
-        dataset_config=dataset_config,
-        root=root,
-        clear_dataset=False,  # 数据清理在函数开始时已处理
-    )
+    # 根据是否需要完全清理来决定创建还是加载数据集
+    if episode_range is None:
+        # 完全清理模式：创建新数据集
+        dataset = create_empty_dataset(
+            repo_id,
+            robot_type="kuavo4pro",
+            mode=mode,
+            has_effort=False,
+            has_velocity=False,
+            dataset_config=dataset_config,
+            root=root,
+            clear_dataset=True,
+        )
+    else:
+        # 范围清理模式：尝试加载现有数据集，如果不存在则创建新的
+        dataset_path = Path(root) / repo_id
+        if dataset_path.exists():
+            log_print.info(f"Loading existing dataset from {dataset_path}")
+            dataset = LeRobotDataset(repo_id, root=root)
+        else:
+            log_print.info(f"Creating new dataset at {dataset_path}")
+            dataset = create_empty_dataset(
+                repo_id,
+                robot_type="kuavo4pro",
+                mode=mode,
+                has_effort=False,
+                has_velocity=False,
+                dataset_config=dataset_config,
+                root=root,
+                clear_dataset=False,
+            )
     dataset = populate_dataset(
         dataset,
         bag_files,
