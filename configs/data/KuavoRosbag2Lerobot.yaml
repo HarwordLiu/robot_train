@@ -7,7 +7,7 @@ hydra: # Hydra 配置文件保存目录，仅供参数检查使用
 
 # kuavo rosbag数据转换成lerobot-parquet格式0配置文件
 rosbag:
-  rosbag_dir: /root/cloud/robot/original_data/TASK1-TargetPlacement # rosbag文件目录
+  rosbag_dir: /root/cloud/robot/original_data/TASK1-TargetPlacement/201-400 # rosbag文件目录
   num_used: null # 使用的rosbag数量(若设置为任意数字，则会随机采样选择)
   lerobot_dir: /root/robot/data # 转换后的lerobot文件的保存目录
   episode_range: [200, 399] # null=全清空并转换所有bag文件, [start,end]=清空指定范围并转换对应索引的bag文件
