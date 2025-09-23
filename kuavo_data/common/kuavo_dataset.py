@@ -484,7 +484,7 @@ class KuavoRosbagReader:
     
     
     def list_bag_files(self, bag_dir: str):
-        bag_files = glob.glob(os.path.join(bag_dir, '*.bag'))
+        bag_files = glob.glob(os.path.join(bag_dir, '**/*.bag'), recursive=True)
         bag_files.sort()
         return bag_files
     
