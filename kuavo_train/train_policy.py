@@ -263,10 +263,18 @@ def main(cfg: DictConfig):
     delta_timestamps = build_delta_timestamps(dataset_metadata, policy_cfg)
 
     image_transforms = build_augmenter(cfg.training.RGB_Augmenter)
+    # 限制使用的episodes数量来控制显存占用
+    episodes_to_use = getattr(cfg, 'episodes', None)
+    if episodes_to_use is None:
+        # 如果没有指定episodes，默认只使用前200个episodes
+        episodes_to_use = list(range(200))  # 只使用前200个episodes
+        print(f"🚨 Using limited episodes for memory efficiency: {len(episodes_to_use)} episodes")
+
     dataset = LeRobotDataset(
         cfg.repoid,
         delta_timestamps=delta_timestamps,
         root=cfg.root,
+        episodes=episodes_to_use,  # 添加episodes参数
         image_transforms=image_transforms,
     )
 
