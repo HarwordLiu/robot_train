@@ -264,11 +264,23 @@ def main(cfg: DictConfig):
 
     image_transforms = build_augmenter(cfg.training.RGB_Augmenter)
     # 限制使用的episodes数量来控制显存占用
-    episodes_to_use = getattr(cfg, 'episodes', None)
-    if episodes_to_use is None:
-        # 如果没有指定episodes，默认只使用前200个episodes
-        episodes_to_use = list(range(200))  # 只使用前200个episodes
+    episodes_to_use = getattr(cfg, 'episodes_to_use', None)
+    if episodes_to_use is not None:
+        if isinstance(episodes_to_use, int):
+            # 如果是数字，转换为range list: int -> [0, int-1]
+            episodes_to_use = list(range(episodes_to_use))
+        elif isinstance(episodes_to_use, (list, tuple)) and len(episodes_to_use) == 2:
+            # 如果是[start, end]格式，转换为range list
+            start, end = episodes_to_use
+            episodes_to_use = list(range(start, end + 1))  # +1因为range是左闭右开
+        elif isinstance(episodes_to_use, (list, tuple)):
+            # 如果已经是episode列表，直接使用
+            episodes_to_use = list(episodes_to_use)
         print(f"🚨 Using limited episodes for memory efficiency: {len(episodes_to_use)} episodes")
+    else:
+        # 如果没有指定，使用所有episodes
+        episodes_to_use = None
+        print("Using all available episodes")
 
     dataset = LeRobotDataset(
         cfg.repoid,
