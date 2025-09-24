@@ -270,12 +270,12 @@ def main(cfg: DictConfig):
         if isinstance(episodes_to_use, int):
             # 如果是数字，转换为range list: int -> [0, int-1]
             episodes_to_use = list(range(episodes_to_use))
-        elif isinstance(episodes_to_use, (list, tuple)) and len(episodes_to_use) == 2:
-            # 如果是[start, end]格式，转换为range list
-            start, end = episodes_to_use
+        elif hasattr(episodes_to_use, '__len__') and len(episodes_to_use) == 2:
+            # 如果是[start, end]格式（包括ListConfig），转换为range list
+            start, end = int(episodes_to_use[0]), int(episodes_to_use[1])
             episodes_to_use = list(range(start, end + 1))  # +1因为range是左闭右开
             print(f"🔍 Converted range [{start}, {end}] to {len(episodes_to_use)} episodes")
-        elif isinstance(episodes_to_use, (list, tuple)):
+        elif hasattr(episodes_to_use, '__iter__'):
             # 如果已经是episode列表，直接使用
             episodes_to_use = list(episodes_to_use)
         print(f"🚨 Using limited episodes for memory efficiency: {len(episodes_to_use)} episodes")
