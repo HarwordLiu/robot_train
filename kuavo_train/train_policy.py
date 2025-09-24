@@ -265,6 +265,7 @@ def main(cfg: DictConfig):
     image_transforms = build_augmenter(cfg.training.RGB_Augmenter)
     # 限制使用的episodes数量来控制显存占用
     episodes_to_use = getattr(cfg, 'episodes_to_use', None)
+    print(f"🔍 Raw episodes_to_use from config: {episodes_to_use}, type: {type(episodes_to_use)}")
     if episodes_to_use is not None:
         if isinstance(episodes_to_use, int):
             # 如果是数字，转换为range list: int -> [0, int-1]
@@ -273,6 +274,7 @@ def main(cfg: DictConfig):
             # 如果是[start, end]格式，转换为range list
             start, end = episodes_to_use
             episodes_to_use = list(range(start, end + 1))  # +1因为range是左闭右开
+            print(f"🔍 Converted range [{start}, {end}] to {len(episodes_to_use)} episodes")
         elif isinstance(episodes_to_use, (list, tuple)):
             # 如果已经是episode列表，直接使用
             episodes_to_use = list(episodes_to_use)
