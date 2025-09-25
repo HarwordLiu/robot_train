@@ -5,7 +5,7 @@ hydra: # Hydra 配置文件保存目录，仅供参数检查使用
     dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
     subdir: ${hydra:job.override_dirname}
 
-task: 'task_300_episodes' # 自定义任务名称，如果不使用本地数据想使用huggingface官方数据，请指定，例如pusht，aloha_sim_insertion_human等
+task: 'task_200_episodes' # 自定义任务名称，如果不使用本地数据想使用huggingface官方数据，请指定，例如pusht，aloha_sim_insertion_human等
 method: 'diffusion_bs64_usedepth_nofuse' # 自定义方法名称
 timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
 episodes_to_use:
@@ -29,8 +29,8 @@ training:
   accumulation_steps: 1 # 梯度累积步数，自定义
   ema_power: 0.75 # 如果使用ema移动指数平均方法可使用这个参数，目前测试使用ema会掉性能，所以代码中不再支持
 
-  batch_size: 96 # 批次大小
-  num_workers: 11 # dataloader的num_workers
+  batch_size: 64 # 批次大小
+  num_workers: 12 # dataloader的num_workers
   drop_last: False # 是否丢弃最后一个不完整的batch
 
   # 最大训练步数，用于控制学习率调整器，如果指定了 `max_training_step`，则它将优先生效，否则，该值将根据上述的 `max_epoch` 自动确定。
