@@ -38,7 +38,7 @@ training:
   max_training_step: null
 
   # resume training，断点续训
-  resume: True
+  resume: False
   resume_timestamp: 'run_20250924_160628' # 若开启，将从outputs/train/<task>/<method>/<resume_timestamp>中加载最后一个epoch参数续训
 
   # 数据增广相关的配置
