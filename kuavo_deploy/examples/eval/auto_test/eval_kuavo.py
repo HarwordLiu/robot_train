@@ -96,8 +96,8 @@ def check_control_signals():
 def img_preprocess(image, device="cpu"):
     return to_tensor(image).unsqueeze(0).to(device, non_blocking=True)
 
-def depth_preprocess(depth, device="cpu"):
-    return torch.tensor(depth,dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
+def depth_preprocess(depth, device="cpu",depth_range=[0,1000]):
+    return torch.tensor(depth,dtype=torch.float32).clamp(*depth_range).unsqueeze(0).to(device, non_blocking=True)
 
 def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     """
