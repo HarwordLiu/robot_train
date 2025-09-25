@@ -29,7 +29,7 @@ training:
   accumulation_steps: 1 # 梯度累积步数，自定义
   ema_power: 0.75 # 如果使用ema移动指数平均方法可使用这个参数，目前测试使用ema会掉性能，所以代码中不再支持
 
-  batch_size: 128 # 批次大小
+  batch_size: 96 # 批次大小
   num_workers: 11 # dataloader的num_workers
   drop_last: False # 是否丢弃最后一个不完整的batch
 
