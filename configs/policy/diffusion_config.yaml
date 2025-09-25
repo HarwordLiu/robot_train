@@ -29,7 +29,7 @@ training:
   accumulation_steps: 1 # 梯度累积步数，自定义
   ema_power: 0.75 # 如果使用ema移动指数平均方法可使用这个参数，目前测试使用ema会掉性能，所以代码中不再支持
 
-  batch_size: 96 # 批次大小
+  batch_size: 128 # 批次大小
   num_workers: 11 # dataloader的num_workers
   drop_last: False # 是否丢弃最后一个不完整的batch
 
@@ -38,7 +38,7 @@ training:
   max_training_step: null
 
   # resume training，断点续训
-  resume: False
+  resume: True
   resume_timestamp: 'run_20250924_160628' # 若开启，将从outputs/train/<task>/<method>/<resume_timestamp>中加载最后一个epoch参数续训
 
   # 数据增广相关的配置
@@ -111,7 +111,7 @@ policy:
 
   # 图像裁剪，（lerobot内有的策略不支持）
   crop_is_random: True
-  crop_shape: [420, 560] #  [84, 84]
+  crop_shape: [210, 280] #  [84, 84]
 
   use_amp: True # 是否使用混合精度训练
 
@@ -160,7 +160,7 @@ policy:
     use_separate_depth_encoder_per_camera: False
 
     # resize and augmentation
-    resize_shape: [210, 280]
+    resize_shape: [105, 140]
 
     # state encoder.
     use_state_encoder: True
