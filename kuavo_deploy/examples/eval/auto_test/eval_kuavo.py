@@ -210,6 +210,7 @@ def main(config_path: str, episode: int):
     timestamp = cfg.timestamp
     epoch = cfg.epoch
     env_name = cfg.env_name
+    depth_range = cfg.depth_range
 
     pretrained_path = Path(f"outputs/train/{task}/{method}/{timestamp}/epoch{epoch}")
     output_directory = Path(f"outputs/eval/{task}/{method}/{timestamp}/epoch{epoch}")
@@ -297,7 +298,7 @@ def main(config_path: str, episode: int):
             elif "state" in k:
                 observation[k] = torch.from_numpy(v).float().unsqueeze(0).to(device, non_blocking=True)
             elif "depth" in k:
-                observation[k] = depth_preprocess(v, device=device)
+                observation[k] = depth_preprocess(v, device=device, depth_range=depth_range)
 
         with torch.inference_mode():
             action = policy.select_action(observation)
