@@ -1,0 +1,205 @@
+hydra: # Hydra 配置文件保存目录，仅供参数检查使用
+  run:
+    dir: ./outputs/train_hydra_save/singlerun/${now:%Y%m%d_%H%M%S} # 单次运行目录
+  sweep:
+    dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
+    subdir: ${hydra:job.override_dirname}
+
+task: 'task_300_episodes' # 自定义任务名称
+method: 'humanoid_hierarchical' # 自定义方法名称，区分分层架构
+timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
+episodes_to_use:
+  - 0
+  - 299 # 限制使用的episodes数量，[start, end]格式
+
+repoid: 'lerobot/${task}'
+root: '/robot/data/task-1/1-2000/lerobot' # 你的本地转换好的lerobot数据的目录
+
+# 训练相关配置
+training:
+  output_directory: 'outputs/train/${task}/${method}' # 模型参数保存路径
+  seed: 42
+  max_epoch: 500
+  save_freq_epoch: 10
+  log_freq: 1
+  device: 'cuda'
+  accumulation_steps: 1
+  ema_power: 0.75
+
+  batch_size: 64 # 分层架构使用稍小的batch size
+  num_workers: 11
+  drop_last: False
+
+  max_training_step: null
+  resume: False
+  resume_timestamp: null
+
+  # 数据增广相关的配置
+  RGB_Augmenter:
+    enable: True
+    max_num_transforms: 1
+    random_order: True
+    tfs:
+      notransform:
+        weight: 2.0
+        type: 'Identity'
+        kwargs: {}
+      brightness:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'brightness': [0.5, 1.5] }
+      contrast:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'contrast': [0.5, 1.5] }
+
+policy_name: humanoid_diffusion # 新的策略类型
+
+policy:
+  _target_: kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy.HumanoidDiffusionPolicyWrapper
+
+  # 启用分层架构
+  use_hierarchical: True
+
+  # 基础diffusion参数（保持兼容）
+  horizon: 16
+  n_action_steps: 8
+  drop_n_last_frames: 7
+
+  normalization_mapping:
+    RGB:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+    DEPTH:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MIN_MAX
+
+  # 图像处理
+  crop_is_random: True
+  crop_shape: [420, 560]
+  use_amp: True
+
+  # 视觉backbone（使用更轻量的）
+  vision_backbone: efficientnet_b0
+  use_separate_rgb_encoder_per_camera: False
+
+  # diffusion settings
+  noise_scheduler_type: DDPM
+  num_train_timesteps: 100
+  beta_schedule: squaredcos_cap_v2
+  beta_start: 0.0001
+  beta_end: 0.02
+  prediction_type: epsilon
+  clip_sample: true
+  clip_sample_range: 1.0
+  num_inference_steps: null
+  do_mask_loss_for_padding: false
+
+  # optimizer and scheduler
+  optimizer_lr: 0.0001
+  optimizer_betas:
+    - 0.95
+    - 0.999
+  optimizer_eps: 1.0e-08
+  optimizer_weight_decay: 1.0e-03
+  scheduler_name: cosine
+  scheduler_warmup_steps: 500
+
+  # 分层架构特有配置
+  hierarchical:
+    # 四层配置
+    layers:
+      safety:
+        type: "GRU"
+        hidden_size: 64
+        num_layers: 1
+        input_dim: 32  # IMU + 关节状态
+        output_dim: 32  # 平衡控制输出
+        response_time_ms: 10
+        priority: 1
+        enabled: True
+
+      gait:
+        type: "Hybrid"  # GRU + Transformer
+        gru_hidden: 128
+        gru_layers: 2
+        tf_layers: 2
+        tf_heads: 4
+        tf_dim: 128
+        horizon: 20
+        priority: 2
+        enabled: True
+
+      manipulation:
+        type: "Transformer"
+        layers: 3
+        hidden_size: 512
+        heads: 8
+        dim_feedforward: 2048
+        horizon: 100
+        priority: 3
+        enabled: True
+
+      planning:
+        type: "Transformer"
+        layers: 4
+        hidden_size: 1024
+        heads: 16
+        dim_feedforward: 4096
+        horizon: 500
+        priority: 4
+        enabled: True
+
+    # 层权重配置
+    layer_weights:
+      safety: 2.0      # 安全层权重最高
+      gait: 1.5        # 步态层次之
+      manipulation: 1.0 # 操作层标准权重
+      planning: 0.8    # 规划层权重较低
+
+    # 任务特化配置
+    task_specialization:
+      enable: True
+      modules: ["dynamic_grasping", "weighing", "placement", "sorting"]
+
+    # 课程学习配置
+    curriculum_learning:
+      enable: True
+      stages:
+        stage1:
+          name: "safety_only"
+          layers: ["safety"]
+          epochs: 50
+          loss_threshold: 0.1
+        stage2:
+          name: "safety_gait"
+          layers: ["safety", "gait"]
+          epochs: 100
+          loss_threshold: 0.08
+        stage3:
+          name: "safety_gait_manipulation"
+          layers: ["safety", "gait", "manipulation"]
+          epochs: 150
+          loss_threshold: 0.06
+        stage4:
+          name: "full_hierarchy"
+          layers: ["safety", "gait", "manipulation", "planning"]
+          epochs: 200
+          loss_threshold: 0.05
+
+  custom: # 保持与原配置的兼容性
+    # support depth image
+    use_depth: True
+    depth_backbone: efficientnet_b0  # 统一使用EfficientNet
+    use_separate_depth_encoder_per_camera: False
+
+    # resize and augmentation
+    resize_shape: [210, 280]
+
+    # state encoder
+    use_state_encoder: True
+    state_feature_dim: 128
+
+    # 使用分层架构时禁用原有的transformer
+    use_unet: False
+    use_transformer: False  # 由分层架构接管
