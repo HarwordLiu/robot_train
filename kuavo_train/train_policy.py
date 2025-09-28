@@ -16,6 +16,9 @@ import shutil
 from hydra.utils import instantiate
 from diffusers.optimization import get_scheduler
 import gc
+import psutil
+import os
+import multiprocessing
 
 from lerobot.configs.types import FeatureType, NormalizationMode
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata, LeRobotDataset
@@ -318,14 +321,31 @@ def main(cfg: DictConfig):
 
     # Training loop
     for epoch in range(start_epoch, cfg.training.max_epoch):
+        # 动态调整num_workers以避免RAM内存溢出
+        # 根据系统内存和CPU核心数动态调整
+        available_memory_gb = psutil.virtual_memory().available / (1024**3)
+        cpu_count = os.cpu_count()
+
+        # 保守的num_workers设置，避免RAM溢出
+        if available_memory_gb < 32:  # 小于32GB内存
+            num_workers = min(4, cpu_count // 2)
+        elif available_memory_gb < 64:  # 32-64GB内存
+            num_workers = min(8, cpu_count // 2)
+        else:  # 大于64GB内存
+            num_workers = min(cfg.training.num_workers, cpu_count // 2)
+
+        print(
+            f"🔧 Epoch {epoch+1}: Available RAM: {available_memory_gb:.1f}GB, Using {num_workers} workers")
+
         dataloader = DataLoader(
             dataset,
-            num_workers=cfg.training.num_workers,
+            num_workers=num_workers,
             batch_size=cfg.training.batch_size,
             shuffle=True,
             pin_memory=(device.type != "cpu"),
             drop_last=cfg.training.drop_last,
-            prefetch_factor=1,
+            prefetch_factor=2,  # 增加预取因子以提高效率
+            persistent_workers=False,  # 禁用持久化worker以避免内存累积
         )
 
         epoch_bar = tqdm(
@@ -382,6 +402,12 @@ def main(cfg: DictConfig):
         if device.type == "cuda":
             torch.cuda.empty_cache()
 
+        # 强制清理所有子进程（DataLoader workers）
+        for process in multiprocessing.active_children():
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=1)
+
         # Update best loss
         if total_loss < best_loss:
             best_loss = total_loss
@@ -412,6 +438,19 @@ def main(cfg: DictConfig):
             reserved = torch.cuda.memory_reserved(device) / 1024**3   # GB
             print(
                 f"Epoch {epoch+1} completed. GPU Memory - Allocated: {allocated:.2f}GB, Reserved: {reserved:.2f}GB")
+
+        # 打印系统RAM使用情况
+        ram_usage = psutil.virtual_memory()
+        ram_used_gb = ram_usage.used / (1024**3)
+        ram_total_gb = ram_usage.total / (1024**3)
+        ram_percent = ram_usage.percent
+        print(
+            f"📊 Epoch {epoch+1} completed. RAM Usage: {ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB ({ram_percent:.1f}%)")
+
+        # 如果RAM使用率过高，发出警告
+        if ram_percent > 85:
+            print(
+                f"⚠️  WARNING: High RAM usage ({ram_percent:.1f}%), consider reducing num_workers or batch_size")
 
     writer.close()
 
