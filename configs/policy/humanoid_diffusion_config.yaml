@@ -26,8 +26,8 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 64 # 分层架构使用稍小的batch size
-  num_workers: 11
+  batch_size: 32 # 分层架构使用稍小的batch size
+  num_workers: 4
   drop_last: False
 
   max_training_step: null
@@ -220,9 +220,13 @@ policy:
     use_state_encoder: True
     state_feature_dim: 128
 
-    # 使用分层架构时禁用原有的transformer
+    # 使用分层架构时启用transformer
     use_unet: False
-    use_transformer: False # 由分层架构接管
+    use_transformer: True # 分层架构需要transformer支持
+    transformer_n_emb: 512
+    transformer_n_head: 8
+    transformer_n_layer: 4
+    transformer_dropout: 0.1
 
 # 任务特定训练配置
 task_specific_training:

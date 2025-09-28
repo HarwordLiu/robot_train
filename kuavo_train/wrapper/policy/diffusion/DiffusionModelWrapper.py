@@ -318,6 +318,10 @@ class DiffusionRgbEncoder(nn.Module):
         #     else:
         #         # Always use center crop for eval.
         #         x = self.center_crop(x)
+        # 确保输入数据类型正确
+        if x.dtype != torch.float32:
+            x = x.float()
+        
         # Extract backbone feature.
         x = torch.flatten(self.pool(self.backbone(x)), start_dim=1)
         # Final linear layer with non-linearity.
@@ -424,6 +428,10 @@ class DiffusionDepthEncoder(nn.Module):
         #     else:
         #         # Always use center crop for eval.
         #         x = self.center_crop(x)
+        # 确保输入数据类型正确
+        if x.dtype != torch.float32:
+            x = x.float()
+        
         # Extract backbone feature.
         x = torch.flatten(self.pool(self.backbone(x)), start_dim=1)
         # Final linear layer with non-linearity.

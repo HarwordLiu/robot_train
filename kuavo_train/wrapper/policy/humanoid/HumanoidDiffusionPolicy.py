@@ -143,8 +143,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         # 任务识别（增强版，考虑课程学习信息）
         task_info = self._identify_task(batch, curriculum_info)
 
-        # 分层处理（使用当前激活的层）
-        layer_outputs = self.scheduler(batch, task_info, enabled_layers=self.enabled_layers)
+        # 分层处理
+        layer_outputs = self.scheduler(batch, task_info)
 
         # Diffusion损失计算
         diffusion_loss = self.diffusion.compute_loss(batch, layer_outputs)
@@ -219,11 +219,23 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
     def _update_curriculum_state(self, curriculum_info: Dict[str, Any]):
         """更新课程学习状态"""
+        stage_changed = False
+        layers_changed = False
+        
         if 'stage' in curriculum_info:
-            self.current_curriculum_stage = curriculum_info['stage']
+            new_stage = curriculum_info['stage']
+            if new_stage != self.current_curriculum_stage:
+                self.current_curriculum_stage = new_stage
+                stage_changed = True
 
         if 'enabled_layers' in curriculum_info:
-            self.enabled_layers = curriculum_info['enabled_layers'].copy()
+            new_layers = curriculum_info['enabled_layers'].copy()
+            if new_layers != self.enabled_layers:
+                self.enabled_layers = new_layers
+                layers_changed = True
+        
+        # 只在状态真正改变时输出日志，避免进度条重复渲染
+        if stage_changed or layers_changed:
             print(f"🎓 课程学习阶段: {self.current_curriculum_stage}, 激活层: {self.enabled_layers}")
 
     def _identify_task(self, batch: Dict[str, torch.Tensor],

@@ -52,7 +52,7 @@ class HierarchicalFeatureFusion(nn.Module):
 
         # 特征融合网络
         self.safety_fusion = nn.Linear(64, 32)   # 安全层特征融合
-        self.gait_fusion = nn.Linear(128, 64)    # 步态层特征融合
+        self.gait_fusion = nn.Linear(32, 64)     # 步态层特征融合 (修正维度)
         self.manipulation_fusion = nn.Linear(512, 128)  # 操作层特征融合
         self.planning_fusion = nn.Linear(1024, 256)     # 规划层特征融合
 

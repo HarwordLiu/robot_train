@@ -78,9 +78,9 @@ class HierarchicalScheduler(nn.Module):
 
         # 按优先级顺序处理各层
         for layer_name in self._get_processing_order():
-            layer = self.layers.get(layer_name)
-            if layer is None:
+            if layer_name not in self.layers:
                 continue
+            layer = self.layers[layer_name]
 
             # 检查是否应该激活该层
             if not layer.should_activate(batch, context):

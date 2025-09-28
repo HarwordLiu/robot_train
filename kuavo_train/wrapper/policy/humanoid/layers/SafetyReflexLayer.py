@@ -125,7 +125,7 @@ class SafetyReflexLayer(BaseLayer):
 
         # 紧急情况检测
         emergency_score = self.emergency_detector(last_output)  # [batch_size, 1]
-        emergency = (emergency_score > self.emergency_threshold).squeeze(-1)  # [batch_size]
+        emergency = (emergency_score > self.emergency_threshold).squeeze(-1).float()  # [batch_size] 转为float避免Boolean tensor问题
 
         # 倾斜检测
         tilt_angles = self.tilt_detector(last_output)  # [batch_size, 2] (roll, pitch)
@@ -217,7 +217,11 @@ class SafetyReflexLayer(BaseLayer):
         """快速安全检查（不执行完整前向传播）"""
         with torch.no_grad():
             output = self.forward(inputs)
-            return not torch.any(output['emergency'])
+            emergency_tensor = output['emergency']
+            if emergency_tensor.numel() == 1:
+                return not emergency_tensor.item()
+            else:
+                return not torch.any(emergency_tensor).item()
 
     def __repr__(self) -> str:
         return (f"SafetyReflexLayer(input_dim={self.input_dim}, hidden_size={self.hidden_size}, "
