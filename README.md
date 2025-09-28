@@ -1,4 +1,3 @@
-
 # 🚀 **Kuavo Data Challenge**
 
 > 具身智能操作任务挑战赛 | 乐聚机器人·北京通用人工智能研究院 | [2025/09 2026/03]
@@ -239,7 +238,7 @@ git clone --depth=1 git@github.com:LejuRobotics/kuavo_data_challenge.git
 # 或者
 # HTTPS
 git clone --depth=1 https://github.com/LejuRobotics/kuavo_data_challenge.git
-
+```
 
 更新third_party下的lerobot子模块：
 
