@@ -113,8 +113,8 @@ policy:
         type: "GRU"
         hidden_size: 64
         num_layers: 1
-        input_dim: 32  # IMU + 关节状态
-        output_dim: 32  # 平衡控制输出
+        input_dim: 16  # 手臂关节状态(双臂14维+手爪2维)，适配only_arm=true配置
+        output_dim: 16  # 对应手臂控制输出
         response_time_ms: 10
         priority: 1
         enabled: True

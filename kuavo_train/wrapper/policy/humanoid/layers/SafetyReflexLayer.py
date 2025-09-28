@@ -24,10 +24,20 @@ class SafetyReflexLayer(BaseLayer):
 
         self.base_config = base_config
 
-        # 输入维度配置
-        self.input_dim = config.get('input_dim', 32)  # IMU + 关节状态
+        # 输入维度配置 - 适配实际机器人状态
+        # 根据实际机器人配置：only_arm=true时，状态为双臂14维+手爪2维=16维
+        if 'input_dim' in config:
+            self.input_dim = config['input_dim']
+        else:
+            # 从base_config推断状态维度
+            state_shape = getattr(base_config, 'robot_state_feature', None)
+            if state_shape and hasattr(state_shape, 'shape'):
+                self.input_dim = state_shape.shape[0]
+            else:
+                self.input_dim = 16  # 默认：双臂+手爪配置
+
         self.hidden_size = config.get('hidden_size', 64)
-        self.output_dim = config.get('output_dim', 32)  # 关节控制输出
+        self.output_dim = config.get('output_dim', self.input_dim)  # 输出维度与输入对应
 
         # 极简GRU，确保最低延迟
         self.balance_gru = nn.GRU(

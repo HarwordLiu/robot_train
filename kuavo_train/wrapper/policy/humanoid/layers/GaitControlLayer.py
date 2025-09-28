@@ -24,8 +24,13 @@ class GaitControlLayer(BaseLayer):
 
         self.base_config = base_config
 
-        # 配置参数
-        self.input_dim = getattr(base_config, 'robot_state_feature', type('obj', (object,), {'shape': [64]})).shape[0]
+        # 配置参数 - 适配实际机器人状态维度
+        state_shape = getattr(base_config, 'robot_state_feature', None)
+        if state_shape and hasattr(state_shape, 'shape'):
+            self.input_dim = state_shape.shape[0]
+        else:
+            # 默认配置：only_arm=true时的双臂+手爪配置
+            self.input_dim = 16
         self.gru_hidden = config.get('gru_hidden', 128)
         self.gru_layers = config.get('gru_layers', 2)
         self.tf_layers = config.get('tf_layers', 2)

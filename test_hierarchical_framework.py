@@ -16,9 +16,10 @@ from kuavo_train.wrapper.policy.humanoid.HierarchicalScheduler import Hierarchic
 
 
 class MockConfig:
-    """模拟配置对象"""
+    """模拟配置对象 - 匹配实际机器人配置"""
     def __init__(self):
-        self.robot_state_feature = type('obj', (object,), {'shape': [64]})()
+        # 适配only_arm=true配置：双臂14维+手爪2维=16维
+        self.robot_state_feature = type('obj', (object,), {'shape': [16]})()
         self.use_hierarchical = True
 
 
@@ -27,9 +28,9 @@ def test_safety_layer():
     print("🧪 Testing SafetyReflexLayer...")
 
     config = {
-        'input_dim': 32,
+        'input_dim': 16,  # 适配实际机器人配置
         'hidden_size': 64,
-        'output_dim': 32,
+        'output_dim': 16,
         'emergency_threshold': 0.8,
         'tilt_threshold_degrees': 15.0,
         'enabled': True
@@ -38,11 +39,11 @@ def test_safety_layer():
     base_config = MockConfig()
     layer = SafetyReflexLayer(config, base_config)
 
-    # 创建测试输入
+    # 创建测试输入 - 匹配实际机器人状态维度
     batch_size = 4
     seq_len = 10
     inputs = {
-        'observation.state': torch.randn(batch_size, seq_len, 32)
+        'observation.state': torch.randn(batch_size, seq_len, 16)  # 双臂+手爪配置
     }
 
     # 测试前向传播
@@ -79,11 +80,11 @@ def test_gait_layer():
     base_config = MockConfig()
     layer = GaitControlLayer(config, base_config)
 
-    # 创建测试输入
+    # 创建测试输入 - 匹配实际机器人配置
     batch_size = 4
     seq_len = 15
     inputs = {
-        'observation.state': torch.randn(batch_size, seq_len, 64)
+        'observation.state': torch.randn(batch_size, seq_len, 16)  # 适配双臂+手爪配置
     }
 
     # 测试前向传播
@@ -118,11 +119,11 @@ def test_manipulation_layer():
     base_config = MockConfig()
     layer = ManipulationLayer(config, base_config)
 
-    # 创建测试输入
+    # 创建测试输入 - 匹配实际机器人配置
     batch_size = 2
     seq_len = 8
     inputs = {
-        'observation.state': torch.randn(batch_size, seq_len, 64),
+        'observation.state': torch.randn(batch_size, seq_len, 16),  # 适配双臂+手爪配置
         'observation.images': torch.randn(batch_size, seq_len, 1280)  # 模拟视觉特征
     }
 
@@ -158,11 +159,11 @@ def test_planning_layer():
     base_config = MockConfig()
     layer = GlobalPlanningLayer(config, base_config)
 
-    # 创建测试输入
+    # 创建测试输入 - 匹配实际机器人配置
     batch_size = 2
     seq_len = 5
     inputs = {
-        'observation.state': torch.randn(batch_size, seq_len, 64),
+        'observation.state': torch.randn(batch_size, seq_len, 16),  # 适配双臂+手爪配置
         'observation.images': torch.randn(batch_size, seq_len, 1280)
     }
 
@@ -194,9 +195,9 @@ def test_hierarchical_scheduler():
         'layers': {
             'safety': {
                 'type': 'GRU',
-                'input_dim': 32,
+                'input_dim': 16,  # 适配实际机器人配置
                 'hidden_size': 64,
-                'output_dim': 32,
+                'output_dim': 16,
                 'enabled': True
             },
             'gait': {
@@ -235,11 +236,11 @@ def test_hierarchical_scheduler():
     base_config = MockConfig()
     scheduler = HierarchicalScheduler(hierarchical_config, base_config)
 
-    # 创建测试输入
+    # 创建测试输入 - 匹配实际机器人配置
     batch_size = 2
     seq_len = 10
     batch = {
-        'observation.state': torch.randn(batch_size, seq_len, 64)
+        'observation.state': torch.randn(batch_size, seq_len, 16)  # 适配双臂+手爪配置
     }
 
     task_info = {

@@ -30,9 +30,14 @@ class GlobalPlanningLayer(BaseLayer):
         self.num_heads = config.get('heads', 16)
         self.dim_feedforward = config.get('dim_feedforward', 4096)
 
-        # 特征维度计算
+        # 特征维度计算 - 适配实际机器人配置
         visual_dim = 1280  # EfficientNet-B0输出
-        state_dim = getattr(base_config, 'robot_state_feature', type('obj', (object,), {'shape': [64]})).shape[0]
+        state_shape = getattr(base_config, 'robot_state_feature', None)
+        if state_shape and hasattr(state_shape, 'shape'):
+            state_dim = state_shape.shape[0]
+        else:
+            # 默认配置：only_arm=true时的双臂+手爪配置
+            state_dim = 16
         self.input_projection = nn.Linear(visual_dim + state_dim, self.hidden_size)
 
         # 大型Transformer用于复杂推理
