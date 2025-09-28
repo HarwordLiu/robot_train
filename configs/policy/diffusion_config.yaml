@@ -10,7 +10,7 @@ method: 'diffusion_bs64_usedepth_nofuse' # 自定义方法名称
 timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
 episodes_to_use:
   - 0
-  - 299 # 限制使用的episodes数量，[start, end]格式
+  - 199 # 限制使用的episodes数量，[start, end]格式
 # 训练时模型参数的保存目录在outputs/train/<task>/<method>/<timestamp>中
 repoid: 'lerobot/${task}' # lerobot新版本需指定这个，仅供参考，设置了即可
 root: '/root/robot/data/data/task1/lerobot' # 你的本地转换好的lerobot数据的目录
