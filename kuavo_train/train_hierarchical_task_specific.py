@@ -154,21 +154,34 @@ def build_hierarchical_policy(policy_cfg, dataset_stats):
 
 def load_task_dataset(task_id: int, cfg: DictConfig, policy_cfg, image_transforms) -> Tuple[Optional[LeRobotDataset], Optional[LeRobotDatasetMetadata]]:
     """加载特定任务的数据集"""
-    task_config = cfg.get('task_specific_training', {})
-    data_config = task_config.get('data_config', {})
+    # 临时修改：直接从root配置读取任务一数据
+    if task_id == 1:
+        # 使用root配置的数据路径
+        task_data_path = cfg.get('root', '')
+        if not task_data_path:
+            print(f"⚠️  root配置未设置")
+            return None, None
+        
+        if not os.path.exists(task_data_path):
+            print(f"⚠️  root数据路径不存在: {task_data_path}")
+            return None, None
+    else:
+        # 其他任务仍使用原有逻辑
+        task_config = cfg.get('task_specific_training', {})
+        data_config = task_config.get('data_config', {})
 
-    # 构建任务数据路径
-    base_path = data_config.get('base_path', '/robot/data')
-    task_dir = data_config.get('task_directories', {}).get(task_id)
+        # 构建任务数据路径
+        base_path = data_config.get('base_path', '/robot/data')
+        task_dir = data_config.get('task_directories', {}).get(task_id)
 
-    if not task_dir:
-        print(f"⚠️  任务{task_id}的数据目录未配置")
-        return None, None
+        if not task_dir:
+            print(f"⚠️  任务{task_id}的数据目录未配置")
+            return None, None
 
-    task_data_path = os.path.join(base_path, task_dir)
-    if not os.path.exists(task_data_path):
-        print(f"⚠️  任务{task_id}数据路径不存在: {task_data_path}")
-        return None, None
+        task_data_path = os.path.join(base_path, task_dir)
+        if not os.path.exists(task_data_path):
+            print(f"⚠️  任务{task_id}数据路径不存在: {task_data_path}")
+            return None, None
 
     try:
         # 加载任务数据集元数据
@@ -393,7 +406,8 @@ def main(cfg: DictConfig):
 
     print("🎯 任务特定分层人形机器人Diffusion Policy训练")
     print("=" * 70)
-    print(f"配置: {cfg.defaults}")
+    print(f"任务: {cfg.task}")
+    print(f"方法: {cfg.method}")
     print(f"使用分层架构: {cfg.policy.get('use_hierarchical', False)}")
     print(f"任务特定训练: {cfg.get('task_specific_training', {}).get('enable', False)}")
 
@@ -430,31 +444,31 @@ def main(cfg: DictConfig):
     input_features = None
     output_features = None
 
-    for task_id_str, task_dir in available_tasks.items():
-        task_id = int(task_id_str)
+    # 临时修改：只处理任务一，直接从root配置读取
+    task_id = 1
+    temp_dataset_metadata = None
+    try:
+        # 使用root配置的数据路径
+        task_data_path = cfg.get('root', '')
+        
+        if task_data_path and os.path.exists(task_data_path):
+            task_repoid = f"lerobot/task_{task_id}"
+            temp_dataset_metadata = LeRobotDatasetMetadata(task_repoid, root=task_data_path)
 
-        # 构建临时配置用于加载数据集元数据
-        temp_dataset_metadata = None
-        try:
-            base_path = task_config.get('data_config', {}).get('base_path', '/robot/data')
-            task_data_path = os.path.join(base_path, task_dir)
+            if not first_task_loaded:
+                # 使用第一个任务的特征信息
+                features = dataset_to_policy_features(temp_dataset_metadata.features)
+                input_features = {k: ft for k, ft in features.items() if ft.type is not FeatureType.ACTION}
+                output_features = {k: ft for k, ft in features.items() if ft.type is FeatureType.ACTION}
+                first_task_loaded = True
 
-            if os.path.exists(task_data_path):
-                task_repoid = f"lerobot/task_{task_id}"
-                temp_dataset_metadata = LeRobotDatasetMetadata(task_repoid, root=task_data_path)
+            task_manager.register_available_task(task_id, temp_dataset_metadata.info["total_episodes"], task_data_path)
+            print(f"✅ 检测到任务{task_id}数据: {temp_dataset_metadata.info['total_episodes']}个episodes")
+        else:
+            print(f"⚠️  root数据路径不存在或未配置: {task_data_path}")
 
-                if not first_task_loaded:
-                    # 使用第一个任务的特征信息
-                    features = dataset_to_policy_features(temp_dataset_metadata.features)
-                    input_features = {k: ft for k, ft in features.items() if ft.type is not FeatureType.ACTION}
-                    output_features = {k: ft for k, ft in features.items() if ft.type is FeatureType.ACTION}
-                    first_task_loaded = True
-
-                task_manager.register_available_task(task_id, temp_dataset_metadata.info["total_episodes"], task_data_path)
-                print(f"✅ 检测到任务{task_id}数据: {temp_dataset_metadata.info['total_episodes']}个episodes")
-
-        except Exception as e:
-            print(f"⚠️  任务{task_id}数据检测失败: {e}")
+    except Exception as e:
+        print(f"⚠️  任务{task_id}数据检测失败: {e}")
 
     if not task_manager.available_tasks:
         logger.error("❌ 没有检测到可用的任务数据")

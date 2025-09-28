@@ -110,6 +110,10 @@ def test_hierarchical_policy_integration():
                     'manipulation': 1.0
                 }
             },
+            'custom': {
+                'use_depth': True,
+                'use_state_encoder': True
+            },
             'horizon': 16,
             'n_action_steps': 8,
             'device': 'cpu'

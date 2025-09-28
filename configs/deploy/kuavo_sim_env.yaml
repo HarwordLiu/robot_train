@@ -67,10 +67,10 @@ eval_episodes: 100  # 测试回合数，仿真默认为100，用于打分
 seed: 42  # 随机种子，仿真中可用于固定各物体初始状态，便于复现
 start_seed: 42  # 回合开始时的随机种子，仿真中可用于固定各物体初始状态，便于复现  
 device: "cuda"  # or "cpu"
-task: "your_task"
-method: "your_method"
-timestamp: "your_timestamp"
-epoch: 10  # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
+task: "task_300_episodes"
+method: "diffusion_bs64_usedepth_nofuse"
+timestamp: "run_20250926_143117"
+epoch: 50  # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
 max_episode_steps: 500  # 最大回合步数，超过自动结束，根据任务所需时长调整
 env_name: Kuavo-Sim  # kuavo仿真器环境名称
 

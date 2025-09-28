@@ -3,7 +3,7 @@ HumanoidDiffusionPolicy: 分层人形机器人Diffusion Policy主入口
 """
 import torch
 import torch.nn as nn
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 from pathlib import Path
 
 # 导入原有的组件
@@ -26,16 +26,23 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
     def __init__(self,
                  config: CustomDiffusionConfigWrapper,
-                 dataset_stats: Optional[Dict[str, Dict[str, torch.Tensor]]] = None):
+                 dataset_stats: Optional[Dict[str, Dict[str, torch.Tensor]]] = None,
+                 use_hierarchical: Optional[bool] = None,
+                 **kwargs):
         """
         初始化分层Diffusion Policy
 
         Args:
             config: 配置对象
             dataset_stats: 数据集统计信息
+            use_hierarchical: 是否启用分层架构（可选，优先使用config中的设置）
+            **kwargs: 其他参数（用于Hydra兼容性）
         """
-        # 检查是否启用分层架构
-        self.use_hierarchical = getattr(config, 'use_hierarchical', False)
+        # 检查是否启用分层架构（优先使用参数，其次使用config）
+        if use_hierarchical is not None:
+            self.use_hierarchical = use_hierarchical
+        else:
+            self.use_hierarchical = getattr(config, 'use_hierarchical', False)
 
         if self.use_hierarchical:
             # 使用分层架构

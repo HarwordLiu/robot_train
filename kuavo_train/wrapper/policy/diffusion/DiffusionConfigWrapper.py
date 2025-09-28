@@ -23,6 +23,8 @@ T = TypeVar("T", bound="CustomDiffusionConfigWrapper")
 @dataclass
 class CustomDiffusionConfigWrapper(DiffusionConfig):
     custom: Dict[str, Any] = field(default_factory=dict)
+    use_hierarchical: bool = field(default=False)
+    hierarchical: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         super().__post_init__()

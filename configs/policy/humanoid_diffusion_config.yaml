@@ -13,7 +13,7 @@ episodes_to_use:
   - 399 # 限制使用的episodes数量，[start, end]格式
 
 repoid: 'lerobot/${task}'
-root: '/mnt/e/robot/data/data/task1/lerobot/1-400' # 你的本地转换好的lerobot数据的目录
+root: '/mnt/e/robot/data/data/task1/lerobot/1-400' # 你的本地转换好的lerobot数据的目录（任务一数据）
 
 # 训练相关配置
 training:
@@ -56,7 +56,7 @@ training:
 policy_name: humanoid_diffusion # 新的策略类型
 
 policy:
-  _target_: kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy.HumanoidDiffusionPolicyWrapper
+  _target_: kuavo_train.wrapper.policy.diffusion.DiffusionConfigWrapper.CustomDiffusionConfigWrapper
 
   # 启用分层架构
   use_hierarchical: True
@@ -80,7 +80,7 @@ policy:
   use_amp: True
 
   # 视觉backbone（使用更轻量的）
-  vision_backbone: efficientnet_b0
+  vision_backbone: resnet18
   use_separate_rgb_encoder_per_camera: False
 
   # diffusion settings
@@ -210,7 +210,7 @@ policy:
   custom: # 保持与原配置的兼容性
     # support depth image
     use_depth: True
-    depth_backbone: efficientnet_b0 # 统一使用EfficientNet
+    depth_backbone: resnet18 # 统一使用ResNet
     use_separate_depth_encoder_per_camera: False
 
     # resize and augmentation
@@ -227,11 +227,11 @@ policy:
 # 任务特定训练配置
 task_specific_training:
   enable: True
-  # 数据路径配置
+  # 数据路径配置（临时修改：只使用任务一数据）
   data_config:
     base_path: '/robot/data'
     task_directories:
-      1: 'task-1/1-2000/lerobot' # 任务1：动态抓取
+      1: 'task-1/1-2000/lerobot' # 任务1：动态抓取（当前使用root配置）
       2: 'task-2/lerobot' # 任务2：称重（未来）
       3: 'task-3/lerobot' # 任务3：摆放（未来）
       4: 'task-4/lerobot' # 任务4：分拣（未来）
