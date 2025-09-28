@@ -5,15 +5,15 @@ hydra: # Hydra 配置文件保存目录，仅供参数检查使用
     dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
     subdir: ${hydra:job.override_dirname}
 
-task: 'task_300_episodes' # 自定义任务名称
+task: 'task_400_episodes' # 自定义任务名称
 method: 'humanoid_hierarchical' # 自定义方法名称，区分分层架构
 timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
 episodes_to_use:
   - 0
-  - 299 # 限制使用的episodes数量，[start, end]格式
+  - 399 # 限制使用的episodes数量，[start, end]格式
 
 repoid: 'lerobot/${task}'
-root: '/robot/data/task-1/1-2000/lerobot' # 你的本地转换好的lerobot数据的目录
+root: '/mnt/e/robot/data/data/task1/lerobot/1-400' # 你的本地转换好的lerobot数据的目录
 
 # 训练相关配置
 training:
@@ -110,17 +110,17 @@ policy:
     # 四层配置
     layers:
       safety:
-        type: "GRU"
+        type: 'GRU'
         hidden_size: 64
         num_layers: 1
-        input_dim: 16  # 手臂关节状态(双臂14维+手爪2维)，适配only_arm=true配置
-        output_dim: 16  # 对应手臂控制输出
+        input_dim: 16 # 手臂关节状态(双臂14维+手爪2维)，适配only_arm=true配置
+        output_dim: 16 # 对应手臂控制输出
         response_time_ms: 10
         priority: 1
         enabled: True
 
       gait:
-        type: "Hybrid"  # GRU + Transformer
+        type: 'Hybrid' # GRU + Transformer
         gru_hidden: 128
         gru_layers: 2
         tf_layers: 2
@@ -131,7 +131,7 @@ policy:
         enabled: True
 
       manipulation:
-        type: "Transformer"
+        type: 'Transformer'
         layers: 3
         hidden_size: 512
         heads: 8
@@ -141,7 +141,7 @@ policy:
         enabled: True
 
       planning:
-        type: "Transformer"
+        type: 'Transformer'
         layers: 4
         hidden_size: 1024
         heads: 16
@@ -152,15 +152,15 @@ policy:
 
     # 层权重配置
     layer_weights:
-      safety: 2.0      # 安全层权重最高
-      gait: 1.5        # 步态层次之
+      safety: 2.0 # 安全层权重最高
+      gait: 1.5 # 步态层次之
       manipulation: 1.0 # 操作层标准权重
-      planning: 0.8    # 规划层权重较低
+      planning: 0.8 # 规划层权重较低
 
     # 任务特化配置
     task_specialization:
       enable: True
-      modules: ["dynamic_grasping", "weighing", "placement", "sorting"]
+      modules: ['dynamic_grasping', 'weighing', 'placement', 'sorting']
 
     # 课程学习配置 - 支持任务特定训练
     curriculum_learning:
@@ -168,23 +168,23 @@ policy:
       # 传统通用课程学习（作为后备）
       universal_stages:
         stage1:
-          name: "safety_only"
-          layers: ["safety"]
+          name: 'safety_only'
+          layers: ['safety']
           epochs: 50
           loss_threshold: 0.1
         stage2:
-          name: "safety_gait"
-          layers: ["safety", "gait"]
+          name: 'safety_gait'
+          layers: ['safety', 'gait']
           epochs: 100
           loss_threshold: 0.08
         stage3:
-          name: "safety_gait_manipulation"
-          layers: ["safety", "gait", "manipulation"]
+          name: 'safety_gait_manipulation'
+          layers: ['safety', 'gait', 'manipulation']
           epochs: 150
           loss_threshold: 0.06
         stage4:
-          name: "full_hierarchy"
-          layers: ["safety", "gait", "manipulation", "planning"]
+          name: 'full_hierarchy'
+          layers: ['safety', 'gait', 'manipulation', 'planning']
           epochs: 200
           loss_threshold: 0.05
 
@@ -192,25 +192,25 @@ policy:
       task_specific:
         enable: True
         # 当前可用任务列表（动态更新）
-        available_tasks: [1]  # 目前只有任务1
+        available_tasks: [1] # 目前只有任务1
         # 训练模式: "single_task", "progressive_multi_task", "concurrent_multi_task"
-        training_mode: "single_task"
+        training_mode: 'single_task'
 
         # 防遗忘配置
         anti_forgetting:
-          enable: false  # 单任务时关闭
+          enable: false # 单任务时关闭
           rehearsal_ratio: 0.0
           memory_buffer_size: 1000
 
         # 任务权重平衡
         task_balancing:
-          strategy: "complexity_based"  # "equal", "complexity_based", "data_based"
+          strategy: 'complexity_based' # "equal", "complexity_based", "data_based"
           dynamic_adjustment: true
 
   custom: # 保持与原配置的兼容性
     # support depth image
     use_depth: True
-    depth_backbone: efficientnet_b0  # 统一使用EfficientNet
+    depth_backbone: efficientnet_b0 # 统一使用EfficientNet
     use_separate_depth_encoder_per_camera: False
 
     # resize and augmentation
@@ -222,7 +222,7 @@ policy:
 
     # 使用分层架构时禁用原有的transformer
     use_unet: False
-    use_transformer: False  # 由分层架构接管
+    use_transformer: False # 由分层架构接管
 
 # 任务特定训练配置
 task_specific_training:
@@ -231,10 +231,10 @@ task_specific_training:
   data_config:
     base_path: '/robot/data'
     task_directories:
-      1: 'task-1/1-2000/lerobot'  # 任务1：动态抓取
-      2: 'task-2/lerobot'         # 任务2：称重（未来）
-      3: 'task-3/lerobot'         # 任务3：摆放（未来）
-      4: 'task-4/lerobot'         # 任务4：分拣（未来）
+      1: 'task-1/1-2000/lerobot' # 任务1：动态抓取
+      2: 'task-2/lerobot' # 任务2：称重（未来）
+      3: 'task-3/lerobot' # 任务3：摆放（未来）
+      4: 'task-4/lerobot' # 任务4：分拣（未来）
 
   # 当前训练阶段
   current_phase: 1
