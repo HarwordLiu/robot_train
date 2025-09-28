@@ -324,22 +324,13 @@ def main(cfg: DictConfig):
         # 动态调整num_workers以避免RAM内存溢出
         # 根据系统内存和CPU核心数动态调整
         available_memory_gb = psutil.virtual_memory().available / (1024**3)
-        cpu_count = os.cpu_count()
-
-        # 保守的num_workers设置，避免RAM溢出
-        if available_memory_gb < 32:  # 小于32GB内存
-            num_workers = min(4, cpu_count // 2)
-        elif available_memory_gb < 64:  # 32-64GB内存
-            num_workers = min(8, cpu_count // 2)
-        else:  # 大于64GB内存
-            num_workers = min(cfg.training.num_workers, cpu_count // 2)
 
         print(
-            f"🔧 Epoch {epoch+1}: Available RAM: {available_memory_gb:.1f}GB, Using {num_workers} workers")
+            f"🔧 Epoch {epoch+1}: Available RAM: {available_memory_gb:.1f}GB")
 
         dataloader = DataLoader(
             dataset,
-            num_workers=num_workers,
+            num_workers=cfg.training.num_workers,
             batch_size=cfg.training.batch_size,
             shuffle=True,
             pin_memory=(device.type != "cpu"),
