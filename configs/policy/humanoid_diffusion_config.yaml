@@ -162,10 +162,11 @@ policy:
       enable: True
       modules: ["dynamic_grasping", "weighing", "placement", "sorting"]
 
-    # 课程学习配置
+    # 课程学习配置 - 支持任务特定训练
     curriculum_learning:
       enable: True
-      stages:
+      # 传统通用课程学习（作为后备）
+      universal_stages:
         stage1:
           name: "safety_only"
           layers: ["safety"]
@@ -187,6 +188,25 @@ policy:
           epochs: 200
           loss_threshold: 0.05
 
+      # 任务特定训练模式
+      task_specific:
+        enable: True
+        # 当前可用任务列表（动态更新）
+        available_tasks: [1]  # 目前只有任务1
+        # 训练模式: "single_task", "progressive_multi_task", "concurrent_multi_task"
+        training_mode: "single_task"
+
+        # 防遗忘配置
+        anti_forgetting:
+          enable: false  # 单任务时关闭
+          rehearsal_ratio: 0.0
+          memory_buffer_size: 1000
+
+        # 任务权重平衡
+        task_balancing:
+          strategy: "complexity_based"  # "equal", "complexity_based", "data_based"
+          dynamic_adjustment: true
+
   custom: # 保持与原配置的兼容性
     # support depth image
     use_depth: True
@@ -203,3 +223,45 @@ policy:
     # 使用分层架构时禁用原有的transformer
     use_unet: False
     use_transformer: False  # 由分层架构接管
+
+# 任务特定训练配置
+task_specific_training:
+  enable: True
+  # 数据路径配置
+  data_config:
+    base_path: '/robot/data'
+    task_directories:
+      1: 'task-1/1-2000/lerobot'  # 任务1：动态抓取
+      2: 'task-2/lerobot'         # 任务2：称重（未来）
+      3: 'task-3/lerobot'         # 任务3：摆放（未来）
+      4: 'task-4/lerobot'         # 任务4：分拣（未来）
+
+  # 当前训练阶段
+  current_phase: 1
+
+  # 训练策略
+  training_strategy:
+    # 渐进式学习：逐步添加新任务
+    progressive_learning: True
+    # 每阶段最小训练epochs
+    min_epochs_per_phase: 100
+    # 任务切换损失阈值
+    phase_transition_loss_threshold: 0.08
+
+  # 内存管理
+  memory_management:
+    # 限制同时加载的任务数据
+    max_concurrent_tasks: 2
+    # episode数量限制（避免内存溢出）
+    max_episodes_per_task: 300
+    # 数据预加载
+    preload_data: True
+
+  # 性能监控
+  performance_monitoring:
+    # 任务特定指标
+    track_task_specific_metrics: True
+    # 层性能分析
+    layer_performance_analysis: True
+    # 保存任务特定检查点
+    save_task_checkpoints: True
