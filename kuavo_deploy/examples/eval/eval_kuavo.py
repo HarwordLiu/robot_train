@@ -37,6 +37,13 @@ from tqdm import tqdm
 
 from kuavo_train.wrapper.policy.diffusion.DiffusionPolicyWrapper import CustomDiffusionPolicyWrapper
 from lerobot.policies.act.modeling_act import ACTPolicy
+# 添加分层架构支持
+try:
+    from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
+    HIERARCHICAL_AVAILABLE = True
+except ImportError:
+    HIERARCHICAL_AVAILABLE = False
+    log_model.warning("⚠️  Hierarchical architecture not available. Please check your installation.")
 from lerobot.utils.random_utils import set_seed
 import datetime
 import time
@@ -99,8 +106,19 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
         policy = CustomDiffusionPolicyWrapper.from_pretrained(Path(pretrained_path),strict=True)
     elif policy_type == 'act':
         policy = ACTPolicy.from_pretrained(Path(pretrained_path),strict=True)
+    elif policy_type == 'hierarchical_diffusion':
+        if not HIERARCHICAL_AVAILABLE:
+            raise RuntimeError("Hierarchical architecture not available. Please check your installation.")
+        log_model.info("🤖 Loading Hierarchical Diffusion Policy...")
+        policy = HumanoidDiffusionPolicy.from_pretrained(Path(pretrained_path), strict=True)
+
+        # 打印分层架构信息
+        if hasattr(policy, 'print_architecture_summary'):
+            policy.print_architecture_summary()
+
+        log_model.info(f"✅ Hierarchical policy loaded with {len(policy.get_active_layers()) if hasattr(policy, 'get_active_layers') else 'unknown'} active layers")
     else:
-        raise ValueError(f"Unsupported policy type: {policy_type}")
+        raise ValueError(f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion'")
     
     policy.eval()
     policy.to(device)

@@ -1,0 +1,89 @@
+hydra:  # Hydra 配置文件保存目录，仅供参数检查使用
+  run:
+    dir: ./outputs/kuavo_hierarchical_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}  # 单次运行目录
+  sweep:
+    dir: ./outputs/kuavo_hierarchical_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S}  # sweep并行时的根目录
+    subdir: ${hydra:job.override_dirname}
+
+# env config，分层架构仿真器运行配置文件
+real: false # 是否使用真实机器人，仿真环境为false
+
+only_arm: true  # 默认true, 是否只使用手臂数据, 目前的模仿学习只用于手臂数据，选择true会自动屏蔽足关节数据
+eef_type: rq2f85  # 末端执行器类型: 仿真选择：rq2f85, 真机可选：leju_claw, qiangnao
+control_mode: joint # or eef（暂未支持）
+which_arm: both  # 需要哪一只手臂的数据，可选: left, right, both，注意这会同时选择对应手臂的相机，已默认包含头部相机
+head_init: [0,0.209]  # 机器人头部初始位置，仿真请默认使用这个值，保持观测统一
+
+# input_images：输入图像，与训练时保持一致
+input_images: ["head_cam_h",'depth_h','wrist_cam_l','depth_l','wrist_cam_r','depth_r']
+depth_range: [0, 1000]  # 深度图的裁剪范围，单位：毫米，没有深度图时不起作用
+image_size: [480, 640] # 图像大小（高，宽），default=(480, 640)
+ros_rate: 10  # 推理频率，单位Hz
+
+# 以下环境配置为不建议改动配置
+qiangnao_dof_needed: 1   # default=1
+leju_claw_dof_needed: 1 # default=1
+rq2f85_dof_needed: 1 # default=1
+
+arm_init: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # 手臂初始位置，default=0
+arm_min: [-180,-180,-180,-180,-180,-180,-180,-180,-180,-180,-180,-180,-180,-180]
+arm_max: [180,180,180,180,180,180,180,180,180,180,180,180,180,180]
+
+eef_min: [0] # 末端执行器最小角度
+eef_max: [1] # 末端执行器最大角度
+
+is_binary: false # 是否使用二值化夹爪，灵巧手，default=false
+
+# inference config，分层架构模型推理配置
+go_bag_path: /your_bag_path  # 推理时需要提供bag包的完整路径
+
+policy_type: "hierarchical_diffusion"  # 分层架构策略名字！
+use_delta: false # 是否使用增量动作，default=false（暂未支持）
+eval_episodes: 50  # 测试回合数，分层架构可能需要更多时间，适当减少
+seed: 42  # 随机种子，仿真中可用于固定各物体初始状态，便于复现
+start_seed: 42  # 回合开始时的随机种子
+device: "cuda"  # or "cpu"
+
+# 模型路径配置 - 指向分层架构训练输出
+task: "your_task"
+method: "your_method"
+timestamp: "your_timestamp"
+epoch: 10  # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
+
+max_episode_steps: 500  # 最大回合步数，超过自动结束，根据任务所需时长调整
+env_name: Kuavo-Hierarchical-Sim  # kuavo分层架构仿真器环境名称
+
+# 分层架构特有配置
+hierarchical:
+  # 任务复杂度设置
+  task_complexity: "medium"  # low, medium, high, very_high
+
+  # 实时性配置
+  latency_budget_ms: 50.0  # 推理延迟预算（毫秒）
+  enable_adaptive_inference: True  # 启用自适应推理
+
+  # 层级控制
+  enabled_layers: ["safety", "gait", "manipulation"]  # 启用的层，planning层通常在仿真中禁用
+
+  # 安全配置
+  safety_priority: True  # 安全层优先级
+  emergency_override: True  # 紧急情况覆盖
+
+  # 性能监控
+  enable_performance_logging: True  # 启用性能日志
+  log_frequency: 100  # 每N步记录一次详细日志
+
+  # 层特化配置
+  layer_configs:
+    safety:
+      response_time_ms: 10
+      enabled: True
+    gait:
+      response_time_ms: 20
+      enabled: False  # 仅手臂任务，禁用步态层
+    manipulation:
+      response_time_ms: 100
+      enabled: True
+    planning:
+      response_time_ms: 500
+      enabled: False  # 仿真中通常禁用最复杂的层
