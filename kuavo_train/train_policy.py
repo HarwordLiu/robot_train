@@ -335,7 +335,7 @@ def main(cfg: DictConfig):
             shuffle=True,
             pin_memory=(device.type != "cpu"),
             drop_last=cfg.training.drop_last,
-            prefetch_factor=2,  # 增加预取因子以提高效率
+            prefetch_factor=1,
             persistent_workers=False,  # 禁用持久化worker以避免内存累积
         )
 
