@@ -178,6 +178,7 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
     best_stage_loss = float('inf')
 
     for epoch in range(stage_epochs):
+        print(f"🚀 开始 Epoch {epoch+1}/{stage_epochs}")
         epoch_bar = tqdm(
             dataloader, desc="Stage {} Epoch {}/{}".format(stage_name, epoch+1, stage_epochs))
 
@@ -205,6 +206,7 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
             epoch_samples += 1
             stage_steps += 1
 
+        print(f"🏁 Epoch {epoch+1} 训练完成，开始保存检查点...")
         # 计算平均epoch损失
         avg_epoch_loss = total_epoch_loss / max(epoch_samples, 1)
         print(
@@ -259,6 +261,8 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
         else:
             print(
                 f"⏭️  跳过定期检查点保存 (epoch {epoch+1} 不是 {cfg.training.save_freq_epoch} 的倍数)")
+
+        print(f"✅ Epoch {epoch+1} 检查点保存完成")
 
     print("✅ Completed curriculum stage: {} (best loss: {:.4f})".format(
         stage_name, best_stage_loss))
