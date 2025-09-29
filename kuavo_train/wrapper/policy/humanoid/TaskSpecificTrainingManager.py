@@ -74,9 +74,6 @@ class TaskSpecificTrainingManager:
         self.available_tasks = []
         self.current_training_phase = 1
 
-        # 从配置文件覆盖课程学习epochs设置
-        self._load_curriculum_config_from_file(config)
-
         # 任务特定权重配置
         self.task_layer_weights = {
             1: {"safety": 2.0, "gait": 0.5, "manipulation": 2.0, "planning": 0.8},
@@ -85,8 +82,13 @@ class TaskSpecificTrainingManager:
             4: {"safety": 2.0, "gait": 1.5, "manipulation": 1.5, "planning": 1.5}
         }
 
-        # 任务特定课程学习阶段（会被配置文件覆盖）
-        self.task_curriculum_stages = {
+        # 任务特定课程学习阶段（从配置文件读取）
+        self.task_curriculum_stages = self._build_task_curriculum_stages(config)
+
+    def _build_task_curriculum_stages(self, config: DictConfig):
+        """从配置文件构建课程学习阶段"""
+        # 默认配置
+        default_stages = {
             1: {  # 动态抓取 - 快速反应导向
                 "stage1": {"name": "safety_reflex", "layers": ["safety"], "epochs": 30},
                 "stage2": {"name": "basic_manipulation", "layers": ["safety", "manipulation"], "epochs": 70},
@@ -113,23 +115,19 @@ class TaskSpecificTrainingManager:
             }
         }
 
-    def _load_curriculum_config_from_file(self, config: DictConfig):
-        """从配置文件中加载课程学习epochs设置"""
+        # 尝试从配置文件覆盖epochs设置
         try:
-            # 检查是否有hierarchical配置
             if hasattr(config, 'policy') and hasattr(config.policy, 'hierarchical'):
                 hierarchical_config = config.policy.hierarchical
-
-                # 检查课程学习配置
                 if hasattr(hierarchical_config, 'curriculum_learning'):
                     curriculum_config = hierarchical_config.curriculum_learning
 
-                    # 优先使用universal_stages配置（用户修改的）
+                    # 优先使用universal_stages配置
                     if hasattr(curriculum_config, 'universal_stages'):
                         universal_stages = curriculum_config.universal_stages
 
-                        # 直接覆盖任务1的课程学习阶段
-                        self.task_curriculum_stages[1] = {
+                        # 覆盖任务1的课程学习阶段
+                        default_stages[1] = {
                             "stage1": {
                                 "name": "safety_reflex",
                                 "layers": ["safety"],
@@ -147,26 +145,14 @@ class TaskSpecificTrainingManager:
                             }
                         }
 
-                        print(f"📝 从配置文件完全重构课程学习:")
-                        for stage_name, stage_config in self.task_curriculum_stages[1].items():
-                            print(f"   {stage_name}: {stage_config['epochs']} epochs, 层: {stage_config['layers']}")
-
-                        print("✅ 成功从配置文件加载课程学习epochs设置")
-
-                    # 检查任务特定配置
-                    elif hasattr(curriculum_config, 'task_specific') and hasattr(curriculum_config.task_specific, 'stages'):
-                        task_stages = curriculum_config.task_specific.stages
-
-                        for stage_name, stage_config in task_stages.items():
-                            if stage_name in self.task_curriculum_stages[1]:
-                                self.task_curriculum_stages[1][stage_name]["epochs"] = stage_config.get("epochs", 30)
-                                print(f"📝 从任务特定配置更新 {stage_name} epochs: {stage_config.get('epochs', 30)}")
-
-                        print("✅ 成功从任务特定配置加载epochs设置")
+                        print("📝 从配置文件读取课程学习epochs:")
+                        for stage_name, stage_config in default_stages[1].items():
+                            print(f"   {stage_name}: {stage_config['epochs']} epochs")
 
         except Exception as e:
-            print(f"⚠️  从配置文件加载课程学习设置失败: {e}")
-            print("将使用默认的epochs设置")
+            print(f"⚠️  读取配置文件epochs失败: {e}, 使用默认设置")
+
+        return default_stages
 
     def register_available_task(self, task_id: int, episode_count: int, data_path: str):
         """注册可用任务数据"""
