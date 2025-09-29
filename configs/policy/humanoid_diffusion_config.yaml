@@ -170,22 +170,22 @@ policy:
         stage1:
           name: 'safety_only'
           layers: ['safety']
-          epochs: 50
+          epochs: 1
           loss_threshold: 0.1
         stage2:
           name: 'safety_gait'
           layers: ['safety', 'gait']
-          epochs: 100
+          epochs: 1
           loss_threshold: 0.08
         stage3:
           name: 'safety_gait_manipulation'
           layers: ['safety', 'gait', 'manipulation']
-          epochs: 150
+          epochs: 1
           loss_threshold: 0.06
         stage4:
           name: 'full_hierarchy'
           layers: ['safety', 'gait', 'manipulation', 'planning']
-          epochs: 200
+          epochs: 1
           loss_threshold: 0.05
 
       # 任务特定训练模式
