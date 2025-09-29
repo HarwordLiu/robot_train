@@ -7,110 +7,110 @@ defaults:
 
 # 模型配置
 model:
-  type: 'diffusion'           # 模型类型标识
+  type: 'diffusion' # 模型类型标识
   # 完整的检查点路径（用户需要根据实际情况修改）
-  checkpoint_path: 'outputs/train/task_400_episodes/diffusion_method/run_20240101_120000/epoch1'
+  checkpoint_path: 'outputs/train/task_300_episodes/diffusion_bs64_usedepth_nofuse/run_20250926_143117/epoch50'
 
 # 覆盖基础配置的特定参数
 test_data:
-  max_episodes: 10            # 传统diffusion可以测试更多episodes
-  max_steps_per_episode: 100  # 每个episode更多步数
+  max_episodes: 10 # 传统diffusion可以测试更多episodes
+  max_steps_per_episode: 100 # 每个episode更多步数
 
 # 传统Diffusion特有评估配置
 diffusion_evaluation:
   # 去噪过程分析
   denoising_analysis:
     enable: True
-    analyze_noise_schedule: True      # 分析噪声调度
-    track_denoising_steps: True       # 跟踪去噪步数
-    save_intermediate_states: False   # 保存中间状态（存储量大）
+    analyze_noise_schedule: True # 分析噪声调度
+    track_denoising_steps: True # 跟踪去噪步数
+    save_intermediate_states: False # 保存中间状态（存储量大）
 
   # 推理步数分析
   inference_steps_analysis:
     enable: True
-    test_different_steps: [10, 20, 50, 100]  # 测试不同的推理步数
-    analyze_quality_vs_speed: True    # 分析质量vs速度权衡
+    test_different_steps: [10, 20, 50, 100] # 测试不同的推理步数
+    analyze_quality_vs_speed: True # 分析质量vs速度权衡
 
   # 轨迹平滑度分析
   trajectory_smoothness:
     enable: True
     smoothness_metrics: ['velocity_variation', 'acceleration_variation', 'jerk']
-    smoothness_window: 10             # 平滑度分析窗口
+    smoothness_window: 10 # 平滑度分析窗口
 
   # 动作一致性分析
   action_consistency:
     enable: True
-    consistency_window: 5             # 一致性检查窗口
-    temporal_correlation: True        # 时序相关性分析
+    consistency_window: 5 # 一致性检查窗口
+    temporal_correlation: True # 时序相关性分析
 
   # 噪声鲁棒性测试
   noise_robustness:
-    enable: False                     # 默认关闭（计算量大）
-    noise_levels: [0.01, 0.05, 0.1]  # 测试噪声水平
-    test_observation_noise: True      # 测试观测噪声
-    test_action_noise: True           # 测试动作噪声
+    enable: False # 默认关闭（计算量大）
+    noise_levels: [0.01, 0.05, 0.1] # 测试噪声水平
+    test_observation_noise: True # 测试观测噪声
+    test_action_noise: True # 测试动作噪声
 
 # 传统Diffusion特有的评估指标
 diffusion_metrics:
   # 去噪质量指标
   denoising_metrics:
-    - 'final_noise_level'       # 最终噪声水平
-    - 'denoising_efficiency'    # 去噪效率
-    - 'convergence_rate'        # 收敛速度
+    - 'final_noise_level' # 最终噪声水平
+    - 'denoising_efficiency' # 去噪效率
+    - 'convergence_rate' # 收敛速度
 
   # 推理速度指标
   speed_metrics:
     - 'inference_time_per_step' # 每步推理时间
-    - 'total_inference_time'    # 总推理时间
-    - 'steps_per_second'        # 每秒推理步数
+    - 'total_inference_time' # 总推理时间
+    - 'steps_per_second' # 每秒推理步数
 
   # 动作质量指标
   action_quality_metrics:
-    - 'action_smoothness'       # 动作平滑度
-    - 'trajectory_efficiency'   # 轨迹效率
-    - 'goal_reaching_accuracy'  # 目标到达精度
+    - 'action_smoothness' # 动作平滑度
+    - 'trajectory_efficiency' # 轨迹效率
+    - 'goal_reaching_accuracy' # 目标到达精度
 
   # 稳定性指标
   stability_metrics:
-    - 'prediction_variance'     # 预测方差
-    - 'temporal_consistency'    # 时序一致性
-    - 'repeatability'           # 可重复性
+    - 'prediction_variance' # 预测方差
+    - 'temporal_consistency' # 时序一致性
+    - 'repeatability' # 可重复性
 
 # 传统Diffusion可视化配置
 diffusion_visualization:
-  plot_denoising_process: True        # 绘制去噪过程
-  plot_action_trajectories: True      # 绘制动作轨迹
-  plot_smoothness_analysis: True      # 绘制平滑度分析
-  plot_inference_speed: True          # 绘制推理速度分析
-  plot_noise_robustness: False        # 绘制噪声鲁棒性（如果启用）
+  plot_denoising_process: True # 绘制去噪过程
+  plot_action_trajectories: True # 绘制动作轨迹
+  plot_smoothness_analysis: True # 绘制平滑度分析
+  plot_inference_speed: True # 绘制推理速度分析
+  plot_noise_robustness: False # 绘制噪声鲁棒性（如果启用）
 
 # 性能优化分析
 performance_optimization:
   enable: True
-  analyze_computation_bottlenecks: True    # 分析计算瓶颈
-  memory_usage_profiling: True             # 内存使用分析
-  gpu_utilization_tracking: True           # GPU利用率跟踪
+  analyze_computation_bottlenecks: True # 分析计算瓶颈
+  memory_usage_profiling: True # 内存使用分析
+  gpu_utilization_tracking: True # GPU利用率跟踪
 
 # 与分层架构的对比分析（可选）
 comparison_with_hierarchical:
-  enable: False               # 是否启用对比分析
-  hierarchical_checkpoint: null  # 分层架构检查点路径
+  enable: False # 是否启用对比分析
+  hierarchical_checkpoint: null # 分层架构检查点路径
   comparison_metrics:
-    - 'inference_speed'       # 推理速度对比
-    - 'action_accuracy'       # 动作精度对比
-    - 'memory_usage'          # 内存使用对比
+    - 'inference_speed' # 推理速度对比
+    - 'action_accuracy' # 动作精度对比
+    - 'memory_usage' # 内存使用对比
 
 # 快速验证模式（1-epoch模型专用）
 quick_validation:
-  enable: False               # 是否启用快速验证模式
-  reduced_episodes: 5         # 减少的测试episodes
-  reduced_steps: 30           # 减少的每episode步数
-  essential_metrics_only: True  # 只计算核心指标
-  skip_denoising_analysis: True  # 跳过去噪分析
+  enable: False # 是否启用快速验证模式
+  reduced_episodes: 5 # 减少的测试episodes
+  reduced_steps: 30 # 减少的每episode步数
+  essential_metrics_only: True # 只计算核心指标
+  skip_denoising_analysis: True # 跳过去噪分析
 
 # 故障诊断配置
 debugging:
-  enable_noise_debugging: True        # 启用噪声调试
-  save_denoising_trajectory: False    # 保存去噪轨迹
-  track_gradient_norms: False         # 跟踪梯度范数（仅用于调试）
-  verbose_inference_info: True        # 详细推理信息输出
+  enable_noise_debugging: True # 启用噪声调试
+  save_denoising_trajectory: False # 保存去噪轨迹
+  track_gradient_norms: False # 跟踪梯度范数（仅用于调试）
+  verbose_inference_info: True # 详细推理信息输出
