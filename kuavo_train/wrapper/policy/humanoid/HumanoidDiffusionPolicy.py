@@ -26,7 +26,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
     def __init__(self,
                  config: CustomDiffusionConfigWrapper,
-                 dataset_stats: Optional[Dict[str, Dict[str, torch.Tensor]]] = None,
+                 dataset_stats: Optional[Dict[str,
+                                              Dict[str, torch.Tensor]]] = None,
                  use_hierarchical: Optional[bool] = None,
                  **kwargs):
         """
@@ -68,7 +69,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             hierarchical_config = getattr(config, 'hierarchical', {})
             self.scheduler = HierarchicalScheduler(hierarchical_config, config)
 
-            print(f"✅ Hierarchical architecture initialized with {len(self.scheduler.layers)} layers")
+            print(
+                f"✅ Hierarchical architecture initialized with {len(self.scheduler.layers)} layers")
 
         except Exception as e:
             print(f"❌ Failed to initialize hierarchical components: {e}")
@@ -103,8 +105,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             self.current_curriculum_stage = None
 
     def forward(self, batch: Dict[str, torch.Tensor],
-               curriculum_info: Optional[Dict[str, Any]] = None,
-               task_weights: Optional[Dict[str, float]] = None) -> Tuple[torch.Tensor, Optional[Dict[str, Any]]]:
+                curriculum_info: Optional[Dict[str, Any]] = None,
+                task_weights: Optional[Dict[str, float]] = None) -> Tuple[torch.Tensor, Optional[Dict[str, Any]]]:
         """
         前向传播，根据架构类型选择处理方式
 
@@ -122,8 +124,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             return super().forward(batch)
 
     def _hierarchical_forward(self, batch: Dict[str, torch.Tensor],
-                             curriculum_info: Optional[Dict[str, Any]] = None,
-                             task_weights: Optional[Dict[str, float]] = None) -> Tuple[torch.Tensor, Dict[str, Any]]:
+                              curriculum_info: Optional[Dict[str, Any]] = None,
+                              task_weights: Optional[Dict[str, float]] = None) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """分层架构的前向传播"""
         # 更新任务条件权重
         if task_weights is not None:
@@ -150,7 +152,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         diffusion_loss = self.diffusion.compute_loss(batch, layer_outputs)
 
         # 分层损失聚合（使用任务特定权重）
-        total_loss = self._aggregate_hierarchical_loss(diffusion_loss, layer_outputs, use_task_weights=True)
+        total_loss = self._aggregate_hierarchical_loss(
+            diffusion_loss, layer_outputs, use_task_weights=True)
 
         # 添加课程学习和任务特定信息到输出
         hierarchical_info = {
@@ -186,7 +189,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
             # 堆叠RGB特征
             from lerobot.constants import OBS_IMAGES
-            batch[OBS_IMAGES] = torch.stack([batch[key] for key in self.config.image_features], dim=-4)
+            batch[OBS_IMAGES] = torch.stack(
+                [batch[key] for key in self.config.image_features], dim=-4)
 
         # 深度图像预处理
         if self.config.use_depth and self.config.depth_features:
@@ -207,7 +211,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
             # 堆叠深度特征
             OBS_DEPTH = "observation.depth"
-            batch[OBS_DEPTH] = torch.stack([batch[key] for key in self.config.depth_features], dim=-4)
+            batch[OBS_DEPTH] = torch.stack(
+                [batch[key] for key in self.config.depth_features], dim=-4)
 
         return batch
 
@@ -221,7 +226,7 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         """更新课程学习状态"""
         stage_changed = False
         layers_changed = False
-        
+
         if 'stage' in curriculum_info:
             new_stage = curriculum_info['stage']
             if new_stage != self.current_curriculum_stage:
@@ -233,13 +238,14 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             if new_layers != self.enabled_layers:
                 self.enabled_layers = new_layers
                 layers_changed = True
-        
+
         # 只在状态真正改变时输出日志，避免进度条重复渲染
         if stage_changed or layers_changed:
-            print(f"🎓 课程学习阶段: {self.current_curriculum_stage}, 激活层: {self.enabled_layers}")
+            print(
+                f"🎓 课程学习阶段: {self.current_curriculum_stage}, 激活层: {self.enabled_layers}")
 
     def _identify_task(self, batch: Dict[str, torch.Tensor],
-                      curriculum_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                       curriculum_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """任务识别（增强版，考虑课程学习信息）"""
         # 基础任务信息
         task_info = {
@@ -302,22 +308,24 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
                 # 损失值
                 if 'loss' in layer_output:
-                    metrics['loss'] = layer_output['loss'].item() if torch.is_tensor(layer_output['loss']) else layer_output['loss']
+                    metrics['loss'] = layer_output['loss'].item() if torch.is_tensor(
+                        layer_output['loss']) else layer_output['loss']
 
                 # 激活状态
                 metrics['active'] = layer_name in self.enabled_layers
 
                 # 权重
-                metrics['weight'] = self.task_layer_weights.get(layer_name, 1.0)
+                metrics['weight'] = self.task_layer_weights.get(
+                    layer_name, 1.0)
 
                 performance[layer_name] = metrics
 
         return performance
 
     def _aggregate_hierarchical_loss(self,
-                                   diffusion_loss: torch.Tensor,
-                                   layer_outputs: Dict[str, Any],
-                                   use_task_weights: bool = False) -> torch.Tensor:
+                                     diffusion_loss: torch.Tensor,
+                                     layer_outputs: Dict[str, Any],
+                                     use_task_weights: bool = False) -> torch.Tensor:
         """聚合分层损失"""
         total_loss = diffusion_loss
 
@@ -325,7 +333,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         if use_task_weights and hasattr(self, 'task_layer_weights'):
             layer_weights = self.task_layer_weights
         else:
-            layer_weights = getattr(self.scheduler.config, 'layer_weights', {}) if self.scheduler else {}
+            layer_weights = getattr(
+                self.scheduler.config, 'layer_weights', {}) if self.scheduler else {}
 
         # 聚合各层的损失（只计算激活层的损失）
         for layer_name, layer_output in layer_outputs.items():
@@ -370,8 +379,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         return self._extract_action_from_layers(layer_outputs, batch)
 
     def _extract_action_from_layers(self,
-                                  layer_outputs: Dict[str, Any],
-                                  batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+                                    layer_outputs: Dict[str, Any],
+                                    batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """从分层输出中提取最终动作"""
         # 优先级处理：安全层可以覆盖其他层的输出
         if 'safety' in layer_outputs and layer_outputs['safety'].get('emergency', False):
@@ -442,7 +451,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         if 'task_layer_weights' in layer_states:
             self.task_layer_weights = layer_states['task_layer_weights'].copy()
 
-        print(f"✅ 已恢复层状态: 阶段={self.current_curriculum_stage}, 激活层={self.enabled_layers}")
+        print(
+            f"✅ 已恢复层状态: 阶段={self.current_curriculum_stage}, 激活层={self.enabled_layers}")
 
     def print_architecture_summary(self):
         """打印架构摘要"""
@@ -461,7 +471,48 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
         if self.scheduler:
             print(f"分层调度器: {type(self.scheduler).__name__}")
-            print(f"总层数: {len(self.scheduler.layers) if hasattr(self.scheduler, 'layers') else 'unknown'}")
+            print(
+                f"总层数: {len(self.scheduler.layers) if hasattr(self.scheduler, 'layers') else 'unknown'}")
+
+    def _save_pretrained(self, save_directory: Path) -> None:
+        """保存分层架构模型，处理共享张量问题"""
+        print(f"🔧 开始保存分层架构模型到: {save_directory}")
+
+        # 创建保存目录
+        save_directory.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # 保存配置
+            self.config._save_pretrained(save_directory)
+            print(f"✅ 配置保存成功")
+
+            # 获取模型状态字典
+            state_dict = self.state_dict()
+            print(f"📊 模型状态字典包含 {len(state_dict)} 个参数")
+
+            # 处理共享张量问题
+            # 创建新的状态字典，避免共享张量
+            clean_state_dict = {}
+            for name, param in state_dict.items():
+                # 克隆参数以避免共享张量
+                clean_state_dict[name] = param.clone()
+
+            # 保存为 safetensors 格式
+            from safetensors.torch import save_file
+            model_file = save_directory / "model.safetensors"
+            save_file(clean_state_dict, model_file)
+            print(f"✅ 模型权重保存成功: {model_file}")
+
+        except Exception as e:
+            print(f"❌ 分层架构模型保存失败: {e}")
+            # 回退到父类方法
+            try:
+                print(f"🔄 尝试使用父类保存方法...")
+                super()._save_pretrained(save_directory)
+                print(f"✅ 父类保存方法成功")
+            except Exception as e2:
+                print(f"❌ 父类保存方法也失败: {e2}")
+                raise e2
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
