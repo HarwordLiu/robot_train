@@ -31,8 +31,8 @@ training:
   drop_last: False
 
   max_training_step: null
-  resume: False
-  resume_timestamp: task_specific_run_20250929_103238
+  resume: True
+  resume_timestamp: task_specific_run_20250929_115908
 
   # 数据增广相关的配置
   RGB_Augmenter:
