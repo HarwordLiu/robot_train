@@ -5,6 +5,16 @@
 defaults:
   - base_eval_config
 
+# 测试数据配置
+test_data:
+  root: '/root/robot/data/data/task1/lerobot'  # 数据根目录
+  repo_id: 'task_400_episodes'  # 数据集ID
+  episodes_range: [0, 50]       # 测试episodes范围 [start, end]
+  batch_size: 1                 # 批处理大小（离线评估通常为1）
+  num_workers: 4                # 数据加载进程数
+  max_episodes: 10              # 最大测试episodes数
+  max_steps_per_episode: 100    # 每个episode最大步数
+
 # 模型配置
 model:
   type: 'humanoid_diffusion'  # 模型类型标识
