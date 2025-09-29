@@ -401,6 +401,7 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
             print(f"💾 正在保存最佳模型到: {best_save_path}")
             try:
                 policy.save_pretrained(best_save_path)
+                save_rng_state(best_save_path / "rng_state.pth")
                 print(f"✅ 最佳模型保存成功: {best_save_path}")
             except Exception as e:
                 print(f"❌ 最佳模型保存失败: {e}")
@@ -419,6 +420,7 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
             print(f"💾 正在保存定期检查点到: {checkpoint_save_path}")
             try:
                 policy.save_pretrained(checkpoint_save_path)
+                save_rng_state(checkpoint_save_path / "rng_state.pth")
                 print(f"✅ 定期检查点保存成功: {checkpoint_save_path}")
             except Exception as e:
                 print(f"❌ 定期检查点保存失败: {e}")
@@ -463,6 +465,7 @@ def save_task_specific_checkpoint(policy, optimizer, lr_scheduler, scaler, steps
     print(f"💾 正在保存 policy 到: {output_directory}")
     try:
         policy.save_pretrained(output_directory)
+        save_rng_state(output_directory / "rng_state.pth")
         print(f"✅ Policy 保存成功")
     except Exception as e:
         print(f"❌ Policy 保存失败: {e}")
@@ -809,11 +812,15 @@ def main(cfg: DictConfig):
         # 更新最佳损失
         if total_loss < best_loss:
             best_loss = total_loss
-            policy.save_pretrained(output_directory / "best")
+            best_path = output_directory / "best"
+            policy.save_pretrained(best_path)
+            save_rng_state(best_path / "rng_state.pth")
 
         # 定期保存检查点
         if (epoch + 1) % cfg.training.save_freq_epoch == 0:
-            policy.save_pretrained(output_directory / f"epoch{epoch+1}")
+            epoch_path = output_directory / f"epoch{epoch+1}"
+            policy.save_pretrained(epoch_path)
+            save_rng_state(epoch_path / "rng_state.pth")
 
         # 保存最新的任务特定检查点
         save_task_specific_checkpoint(

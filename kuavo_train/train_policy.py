@@ -342,14 +342,19 @@ def main(cfg: DictConfig):
         if total_loss < best_loss:
             best_loss = total_loss
             # Save best model
-            policy.save_pretrained(output_directory / "best")
+            best_path = output_directory / "best"
+            policy.save_pretrained(best_path)
+            save_rng_state(best_path / "rng_state.pth")
         # Save checkpoint every N epochs
         if (epoch + 1) % cfg.training.save_freq_epoch == 0:
-            policy.save_pretrained(output_directory / f"epoch{epoch+1}")
+            epoch_path = output_directory / f"epoch{epoch+1}"
+            policy.save_pretrained(epoch_path)
+            save_rng_state(epoch_path / "rng_state.pth")
 
         # Save last checkpoint (includes AMP scaler & progress for perfect resume)
         # Save last checkpoint
         policy.save_pretrained(output_directory)
+        # Note: RNG state is saved separately below with learning_state.pth
         # Save training state including optimizer, scheduler, scaler, and step/epoch info
         checkpoint = {
             "optimizer": optimizer.state_dict(),

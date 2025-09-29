@@ -31,7 +31,7 @@ training:
   drop_last: False
 
   max_training_step: null
-  resume: True
+  resume: False
   resume_timestamp: task_specific_run_20250929_103238
 
   # 数据增广相关的配置
