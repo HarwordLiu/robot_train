@@ -45,28 +45,32 @@ class TaskSpecificTrainingManager:
                 name="dynamic_grasping",
                 complexity_level=2,  # 中等复杂度，需要快速反应
                 required_layers=["safety", "manipulation"],
-                primary_capabilities=["object_detection", "trajectory_tracking", "grasp_control"]
+                primary_capabilities=["object_detection",
+                                      "trajectory_tracking", "grasp_control"]
             ),
             2: TaskInfo(
                 task_id=2,
                 name="package_weighing",
                 complexity_level=3,  # 高复杂度，需要双臂协调
                 required_layers=["safety", "gait", "manipulation"],
-                primary_capabilities=["dual_arm_coordination", "weight_estimation", "balance_control"]
+                primary_capabilities=["dual_arm_coordination",
+                                      "weight_estimation", "balance_control"]
             ),
             3: TaskInfo(
                 task_id=3,
                 name="precise_placement",
                 complexity_level=3,  # 高复杂度，需要精确控制
                 required_layers=["safety", "manipulation", "planning"],
-                primary_capabilities=["spatial_reasoning", "orientation_control", "precision_placement"]
+                primary_capabilities=["spatial_reasoning",
+                                      "orientation_control", "precision_placement"]
             ),
             4: TaskInfo(
                 task_id=4,
                 name="full_process_sorting",
                 complexity_level=4,  # 最高复杂度，全身协调
                 required_layers=["safety", "gait", "manipulation", "planning"],
-                primary_capabilities=["whole_body_coordination", "sequence_planning", "multi_modal_control"]
+                primary_capabilities=["whole_body_coordination",
+                                      "sequence_planning", "multi_modal_control"]
             )
         }
 
@@ -83,7 +87,8 @@ class TaskSpecificTrainingManager:
         }
 
         # 任务特定课程学习阶段（从配置文件读取）
-        self.task_curriculum_stages = self._build_task_curriculum_stages(config)
+        self.task_curriculum_stages = self._build_task_curriculum_stages(
+            config)
 
     def _build_task_curriculum_stages(self, config: DictConfig):
         """从配置文件构建课程学习阶段"""
@@ -142,12 +147,18 @@ class TaskSpecificTrainingManager:
                                 "name": "full_grasping",
                                 "layers": ["safety", "gait", "manipulation"],
                                 "epochs": universal_stages.get("stage3", {}).get("epochs", 1)
+                            },
+                            "stage4": {
+                                "name": "full_grasping",
+                                "layers": ["safety", "gait", "manipulation", "planning"],
+                                "epochs": universal_stages.get("stage4", {}).get("epochs", 1)
                             }
                         }
 
                         print("📝 从配置文件读取课程学习epochs:")
                         for stage_name, stage_config in default_stages[1].items():
-                            print(f"   {stage_name}: {stage_config['epochs']} epochs")
+                            print(
+                                f"   {stage_name}: {stage_config['epochs']} epochs")
 
         except Exception as e:
             print(f"⚠️  读取配置文件epochs失败: {e}, 使用默认设置")
@@ -165,7 +176,8 @@ class TaskSpecificTrainingManager:
                 self.available_tasks.append(task_id)
                 self.available_tasks.sort()
 
-            self.logger.info(f"✅ 注册任务{task_id}数据: {task_info.name}, {episode_count}个episodes")
+            self.logger.info(
+                f"✅ 注册任务{task_id}数据: {task_info.name}, {episode_count}个episodes")
 
             # 更新训练阶段
             self.current_training_phase = max(self.available_tasks)
@@ -192,7 +204,7 @@ class TaskSpecificTrainingManager:
 
         # 按任务复杂度排序
         sorted_tasks = sorted(self.available_tasks,
-                            key=lambda x: self.task_definitions[x].complexity_level)
+                              key=lambda x: self.task_definitions[x].complexity_level)
 
         # 为每个任务创建专门的适应阶段
         for task_id in sorted_tasks:
@@ -238,7 +250,7 @@ class TaskSpecificTrainingManager:
         # 多任务采样策略
         sampling_weights = {}
         total_episodes = sum(self.task_definitions[tid].episode_count
-                           for tid in self.available_tasks)
+                             for tid in self.available_tasks)
 
         for task_id in self.available_tasks:
             task_info = self.task_definitions[task_id]
@@ -248,11 +260,13 @@ class TaskSpecificTrainingManager:
             data_factor = task_info.episode_count / total_episodes
 
             # 平衡复杂度和数据可用性
-            sampling_weights[task_id] = 0.6 * complexity_factor + 0.4 * data_factor
+            sampling_weights[task_id] = 0.6 * \
+                complexity_factor + 0.4 * data_factor
 
         # 归一化权重
         total_weight = sum(sampling_weights.values())
-        sampling_weights = {k: v/total_weight for k, v in sampling_weights.items()}
+        sampling_weights = {k: v/total_weight for k,
+                            v in sampling_weights.items()}
 
         return {
             "strategy": "weighted_sampling",
@@ -262,7 +276,7 @@ class TaskSpecificTrainingManager:
         }
 
     def should_activate_layer_for_task(self, layer_name: str, task_id: int,
-                                     current_stage: Optional[str] = None) -> bool:
+                                       current_stage: Optional[str] = None) -> bool:
         """判断特定任务是否应该激活特定层"""
         task_info = self.task_definitions.get(task_id)
         if not task_info:
@@ -284,10 +298,12 @@ class TaskSpecificTrainingManager:
         """获取批次的任务特定损失权重"""
         # 如果batch中包含任务标识，使用特定权重
         if "task_id" in batch:
-            task_ids = batch["task_id"].cpu().numpy() if isinstance(batch["task_id"], torch.Tensor) else batch["task_id"]
+            task_ids = batch["task_id"].cpu().numpy() if isinstance(
+                batch["task_id"], torch.Tensor) else batch["task_id"]
 
             # 计算批次中各任务的平均权重
-            batch_weights = {"safety": 0, "gait": 0, "manipulation": 0, "planning": 0}
+            batch_weights = {"safety": 0, "gait": 0,
+                             "manipulation": 0, "planning": 0}
 
             for task_id in np.unique(task_ids):
                 if task_id in self.task_layer_weights:
@@ -303,7 +319,7 @@ class TaskSpecificTrainingManager:
         if self.available_tasks:
             primary_task = max(self.available_tasks)  # 使用最新的任务作为主要任务
             return self.task_layer_weights.get(primary_task,
-                {"safety": 2.0, "gait": 1.5, "manipulation": 1.0, "planning": 0.8})
+                                               {"safety": 2.0, "gait": 1.5, "manipulation": 1.0, "planning": 0.8})
 
         return {"safety": 2.0, "gait": 1.5, "manipulation": 1.0, "planning": 0.8}
 
@@ -322,12 +338,14 @@ class TaskSpecificTrainingManager:
             # 单任务训练阶段
             phase_config["curriculum_stages"] = self.task_curriculum_stages[1]
             phase_config["layer_weights"] = self.task_layer_weights[1]
-            phase_config["data_sampling"] = {"strategy": "single_task", "primary_task": 1}
+            phase_config["data_sampling"] = {
+                "strategy": "single_task", "primary_task": 1}
 
         else:
             # 多任务渐进训练阶段
             phase_config["curriculum_stages"] = self._build_progressive_curriculum()
-            phase_config["layer_weights"] = self._compute_weighted_layer_config(self.available_tasks[:phase])
+            phase_config["layer_weights"] = self._compute_weighted_layer_config(
+                self.available_tasks[:phase])
             phase_config["data_sampling"] = self.get_task_data_sampling_strategy()
 
         return phase_config
@@ -339,7 +357,8 @@ class TaskSpecificTrainingManager:
 
         # 基于任务复杂度的加权平均
         weights = {}
-        total_complexity = sum(self.task_definitions[tid].complexity_level for tid in task_list)
+        total_complexity = sum(
+            self.task_definitions[tid].complexity_level for tid in task_list)
 
         for layer in ["safety", "gait", "manipulation", "planning"]:
             weighted_sum = 0
@@ -463,8 +482,10 @@ class TaskSpecificTrainingManager:
 
         print("\n📋 任务详情:")
         for task in summary['available_tasks']:
-            print(f"  任务{task['id']}: {task['name']} (复杂度: {task['complexity']}/4)")
-            print(f"    Episodes: {task['episodes']}, 需要层: {task['required_layers']}")
+            print(
+                f"  任务{task['id']}: {task['name']} (复杂度: {task['complexity']}/4)")
+            print(
+                f"    Episodes: {task['episodes']}, 需要层: {task['required_layers']}")
 
         if summary['anti_forgetting_enabled']:
             print(f"\n🔄 重放比例: {summary['rehearsal_ratio']:.1%}")
