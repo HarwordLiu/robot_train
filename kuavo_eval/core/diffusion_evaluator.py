@@ -183,7 +183,9 @@ class DiffusionEvaluator(BaseEvaluator):
                     correlations.append(abs(pred_corr - true_corr))
 
             if correlations:
-                metrics['temporal_correlation_error'] = float(np.mean(correlations))
+                # 将CUDA张量转换为CPU张量再计算均值
+                correlations_cpu = [corr.cpu() if corr.is_cuda else corr for corr in correlations]
+                metrics['temporal_correlation_error'] = float(np.mean(correlations_cpu))
 
         return metrics
 

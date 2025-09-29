@@ -36,8 +36,10 @@ evaluation:
         1.0,
         1.0,
         1.0,
-      ] # 14关节权重
-    critical_joints: [0, 1, 6, 7] # 关键关节索引
+        1.0,
+        1.0,
+      ] # 16关节权重（双臂14关节+2手爪）
+    critical_joints: [0, 1, 6, 7, 14, 15] # 关键关节索引（包含手爪）
 
   # 时序分析
   temporal_consistency:

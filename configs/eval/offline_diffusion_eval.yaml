@@ -7,24 +7,19 @@ defaults:
 
 # 测试数据配置
 test_data:
-  root: 'E:\robot\data\data\task1\lerobot\1-400'  # 数据根目录
+  root: '/mnt/e/robot/data/data/task1/lerobot/1-400'  # 数据根目录
   repo_id: 'task_400_episodes'  # 数据集ID
   episodes_range: [0, 50]       # 测试episodes范围 [start, end]
   batch_size: 1                 # 批处理大小（离线评估通常为1）
   num_workers: 4                # 数据加载进程数
-  max_episodes: 10              # 最大测试episodes数
-  max_steps_per_episode: 100    # 每个episode最大步数
+  max_episodes: 10              # 最大测试episodes数（传统diffusion可以测试更多episodes）
+  max_steps_per_episode: 100    # 每个episode最大步数（传统diffusion每个episode更多步数）
 
 # 模型配置
 model:
   type: 'diffusion' # 模型类型标识
   # 完整的检查点路径（用户需要根据实际情况修改）
   checkpoint_path: 'outputs/train/task_300_episodes/diffusion_bs64_usedepth_nofuse/run_20250926_143117/epoch50'
-
-# 覆盖基础配置的特定参数
-test_data:
-  max_episodes: 10 # 传统diffusion可以测试更多episodes
-  max_steps_per_episode: 100 # 每个episode更多步数
 
 # 传统Diffusion特有评估配置
 diffusion_evaluation:

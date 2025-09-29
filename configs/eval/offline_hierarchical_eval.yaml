@@ -12,19 +12,14 @@ test_data:
   episodes_range: [0, 50]       # 测试episodes范围 [start, end]
   batch_size: 1                 # 批处理大小（离线评估通常为1）
   num_workers: 4                # 数据加载进程数
-  max_episodes: 10              # 最大测试episodes数
-  max_steps_per_episode: 100    # 每个episode最大步数
+  max_episodes: 5              # 最大测试episodes数
+  max_steps_per_episode: 50    # 每个episode最大步数
 
 # 模型配置
 model:
   type: 'humanoid_diffusion'  # 模型类型标识
   # 完整的检查点路径（用户需要根据实际情况修改）
   checkpoint_path: 'outputs/train/task_400_episodes/humanoid_hierarchical/run_20240101_120000/epoch1'
-
-# 覆盖基础配置的特定参数
-test_data:
-  max_episodes: 5             # 分层架构测试较少episodes（复杂度高）
-  max_steps_per_episode: 50   # 每个episode较少步数（用于快速验证）
 
 # 分层架构特有评估配置
 hierarchical_evaluation:
