@@ -279,7 +279,7 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
                                        task_manager: TaskSpecificTrainingManager, cfg: DictConfig,
                                        device: torch.device, writer: SummaryWriter,
                                        optimizer, lr_scheduler, scaler, output_directory, amp_enabled: bool,
-                                       current_step: int) -> int:
+                                       current_step: int, start_epoch: int = 0) -> int:
     """运行任务特定的课程学习阶段"""
     stage_name = stage_config.get("name", "unknown")
     enabled_layers = stage_config.get("layers", [])
@@ -326,7 +326,7 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
     total_loss = 0.0
     best_stage_loss = float('inf')
 
-    for epoch in range(stage_epochs):
+    for epoch in range(start_epoch, stage_epochs):
         print(f"🚀 开始 Epoch {epoch+1}/{stage_epochs}")
         epoch_bar = tqdm(
             dataloader, desc=f"课程阶段 {stage_name} Epoch {epoch+1}/{stage_epochs}")
@@ -732,7 +732,7 @@ def main(cfg: DictConfig):
         for stage_name, stage_config in curriculum_stages.items():
             current_step = run_task_specific_curriculum_stage(
                 policy, stage_config, dataloader, task_manager, cfg, device, writer,
-                optimizer, lr_scheduler, scaler, output_directory, amp_enabled, current_step
+                optimizer, lr_scheduler, scaler, output_directory, amp_enabled, current_step, start_epoch
             )
 
         print("✅ 任务特定课程学习完成。开始完整训练...")
