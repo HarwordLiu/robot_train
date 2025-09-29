@@ -9,7 +9,8 @@
 python kuavo_train/train_hierarchical_policy.py --config-name=humanoid_diffusion_config
 """
 
-import lerobot_patches.custom_patches  # Ensure custom patches are applied, DON'T REMOVE THIS LINE!
+# Ensure custom patches are applied, DON'T REMOVE THIS LINE!
+import lerobot_patches.custom_patches
 from lerobot.configs.policies import PolicyFeature
 from typing import Any
 
@@ -72,9 +73,11 @@ def build_delta_timestamps(dataset_metadata, policy_cfg):
     delta_timestamps = {}
     for key in dataset_metadata.info["features"]:
         if "observation" in key and obs_indices is not None:
-            delta_timestamps[key] = [i / dataset_metadata.fps for i in obs_indices]
+            delta_timestamps[key] = [
+                i / dataset_metadata.fps for i in obs_indices]
         elif "action" in key and act_indices is not None:
-            delta_timestamps[key] = [i / dataset_metadata.fps for i in act_indices]
+            delta_timestamps[key] = [
+                i / dataset_metadata.fps for i in act_indices]
 
     return delta_timestamps if delta_timestamps else None
 
@@ -84,7 +87,8 @@ def build_optimizer_and_scheduler(policy, cfg, total_frames):
     optimizer = policy.config.get_optimizer_preset().build(policy.parameters())
 
     if cfg.training.max_training_step is None:
-        updates_per_epoch = (total_frames // (cfg.training.batch_size * cfg.training.accumulation_steps)) + 1
+        updates_per_epoch = (
+            total_frames // (cfg.training.batch_size * cfg.training.accumulation_steps)) + 1
         num_training_steps = cfg.training.max_epoch * updates_per_epoch
     else:
         num_training_steps = cfg.training.max_training_step
@@ -109,10 +113,12 @@ def build_policy_config(cfg, input_features, output_features):
         if isinstance(d, DictConfig):
             d = OmegaConf.to_container(d, resolve=True)
         if not isinstance(d, dict):
-            raise TypeError("Expected dict or DictConfig, got {}".format(type(d)))
+            raise TypeError(
+                "Expected dict or DictConfig, got {}".format(type(d)))
 
         return {
-            k: PolicyFeature(**v) if isinstance(v, dict) and not isinstance(v, PolicyFeature) else v
+            k: PolicyFeature(**v) if isinstance(v,
+                                                dict) and not isinstance(v, PolicyFeature) else v
             for k, v in d.items()
         }
 
@@ -123,8 +129,10 @@ def build_policy_config(cfg, input_features, output_features):
         device=cfg.training.device,
     )
 
-    policy_cfg.input_features = _normalize_feature_dict(policy_cfg.input_features)
-    policy_cfg.output_features = _normalize_feature_dict(policy_cfg.output_features)
+    policy_cfg.input_features = _normalize_feature_dict(
+        policy_cfg.input_features)
+    policy_cfg.output_features = _normalize_feature_dict(
+        policy_cfg.output_features)
     return policy_cfg
 
 
@@ -135,7 +143,7 @@ def build_hierarchical_policy(policy_cfg, dataset_stats):
 
 
 def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, writer, current_step,
-                                 optimizer=None, lr_scheduler=None, scaler=None, output_directory=None, amp_enabled=False):
+                                  optimizer=None, lr_scheduler=None, scaler=None, output_directory=None, amp_enabled=False):
     """运行课程学习的单个阶段"""
     stage_name = stage_config.get("name", "unknown")
     enabled_layers = stage_config.get("layers", [])
@@ -143,6 +151,13 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
 
     print("🎓 Starting curriculum stage: {} (layers: {}, epochs: {})".format(
         stage_name, enabled_layers, stage_epochs))
+    print(f"🔧 课程学习阶段参数:")
+    print(f"   - output_directory: {output_directory}")
+    print(f"   - optimizer: {optimizer is not None}")
+    print(f"   - lr_scheduler: {lr_scheduler is not None}")
+    print(f"   - scaler: {scaler is not None}")
+    print(f"   - amp_enabled: {amp_enabled}")
+    print(f"   - save_freq_epoch: {cfg.training.save_freq_epoch}")
 
     # 激活指定的层
     if hasattr(policy, 'set_curriculum_stage'):
@@ -163,14 +178,15 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
     best_stage_loss = float('inf')
 
     for epoch in range(stage_epochs):
-        epoch_bar = tqdm(dataloader, desc="Stage {} Epoch {}/{}".format(stage_name, epoch+1, stage_epochs))
+        epoch_bar = tqdm(
+            dataloader, desc="Stage {} Epoch {}/{}".format(stage_name, epoch+1, stage_epochs))
 
         total_epoch_loss = 0.0
         epoch_samples = 0
 
         for batch in epoch_bar:
             batch = {k: (v.to(device, non_blocking=True) if isinstance(v, torch.Tensor) else v)
-                    for k, v in batch.items()}
+                     for k, v in batch.items()}
 
             # 前向传播时包含课程学习信息
             loss, _ = policy.forward(batch, curriculum_info={
@@ -180,8 +196,10 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
 
             # 记录日志
             if stage_steps % cfg.training.log_freq == 0:
-                writer.add_scalar("curriculum/{}/loss".format(stage_name), loss.item(), current_step + stage_steps)
-                epoch_bar.set_postfix(loss="{:.3f}".format(loss.item()), stage=stage_name)
+                writer.add_scalar("curriculum/{}/loss".format(stage_name),
+                                  loss.item(), current_step + stage_steps)
+                epoch_bar.set_postfix(loss="{:.3f}".format(
+                    loss.item()), stage=stage_name)
 
             total_epoch_loss += loss.item()
             epoch_samples += 1
@@ -189,48 +207,107 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
 
         # 计算平均epoch损失
         avg_epoch_loss = total_epoch_loss / max(epoch_samples, 1)
+        print(
+            f"📊 Epoch {epoch+1} 平均损失: {avg_epoch_loss:.4f}, 当前最佳损失: {best_stage_loss:.4f}")
 
         # 保存最佳模型
         if avg_epoch_loss < best_stage_loss and output_directory is not None:
+            print(
+                f"🎯 发现更好的模型! 损失从 {best_stage_loss:.4f} 改善到 {avg_epoch_loss:.4f}")
             best_stage_loss = avg_epoch_loss
-            policy.save_pretrained(output_directory / "curriculum_{}_best".format(stage_name))
+            best_save_path = output_directory / \
+                "curriculum_{}_best".format(stage_name)
+            print(f"💾 正在保存最佳模型到: {best_save_path}")
+            try:
+                policy.save_pretrained(best_save_path)
+                print(f"✅ 最佳模型保存成功: {best_save_path}")
+            except Exception as e:
+                print(f"❌ 最佳模型保存失败: {e}")
+        elif avg_epoch_loss >= best_stage_loss:
+            print(
+                f"📉 损失未改善，跳过最佳模型保存 (当前: {avg_epoch_loss:.4f}, 最佳: {best_stage_loss:.4f})")
+        elif output_directory is None:
+            print(f"⚠️  output_directory 为 None，跳过最佳模型保存")
 
         # 定期保存检查点
+        print(
+            f"🔍 检查定期保存条件: output_directory={output_directory is not None}, epoch={epoch+1}, save_freq_epoch={cfg.training.save_freq_epoch}")
         if output_directory is not None and (epoch + 1) % cfg.training.save_freq_epoch == 0:
-            policy.save_pretrained(output_directory / "curriculum_{}_epoch{}".format(stage_name, epoch + 1))
+            checkpoint_save_path = output_directory / \
+                "curriculum_{}_epoch{}".format(stage_name, epoch + 1)
+            print(f"💾 正在保存定期检查点到: {checkpoint_save_path}")
+            try:
+                policy.save_pretrained(checkpoint_save_path)
+                print(f"✅ 定期检查点保存成功: {checkpoint_save_path}")
+            except Exception as e:
+                print(f"❌ 定期检查点保存失败: {e}")
 
             # 保存课程学习阶段的详细状态
             if optimizer is not None and lr_scheduler is not None:
-                save_hierarchical_checkpoint(
-                    policy, optimizer, lr_scheduler, scaler,
-                    current_step + stage_steps, epoch + 1, best_stage_loss,
-                    output_directory, amp_enabled
-                )
+                print(f"💾 正在保存分层架构详细状态...")
+                try:
+                    save_hierarchical_checkpoint(
+                        policy, optimizer, lr_scheduler, scaler,
+                        current_step + stage_steps, epoch + 1, best_stage_loss,
+                        output_directory, amp_enabled
+                    )
+                    print(f"✅ 分层架构状态保存成功")
+                except Exception as e:
+                    print(f"❌ 分层架构状态保存失败: {e}")
+            else:
+                print(f"⚠️  optimizer 或 lr_scheduler 为 None，跳过详细状态保存")
+        else:
+            print(
+                f"⏭️  跳过定期检查点保存 (epoch {epoch+1} 不是 {cfg.training.save_freq_epoch} 的倍数)")
 
-    print("✅ Completed curriculum stage: {} (best loss: {:.4f})".format(stage_name, best_stage_loss))
+    print("✅ Completed curriculum stage: {} (best loss: {:.4f})".format(
+        stage_name, best_stage_loss))
     return current_step + stage_steps
 
 
 def save_hierarchical_checkpoint(policy, optimizer, lr_scheduler, scaler, steps, epoch, best_loss,
-                               output_directory, amp_enabled):
+                                 output_directory, amp_enabled):
     """保存分层架构专用的检查点"""
+    print(f"🔧 开始保存分层架构检查点...")
+    print(f"   - output_directory: {output_directory}")
+    print(f"   - steps: {steps}, epoch: {epoch}, best_loss: {best_loss:.4f}")
+    print(f"   - amp_enabled: {amp_enabled}")
+
     # 保存policy
-    policy.save_pretrained(output_directory)
+    print(f"💾 正在保存 policy 到: {output_directory}")
+    try:
+        policy.save_pretrained(output_directory)
+        print(f"✅ Policy 保存成功")
+    except Exception as e:
+        print(f"❌ Policy 保存失败: {e}")
+        return
 
     # 保存分层架构特有的状态
-    checkpoint = {
-        "optimizer": optimizer.state_dict(),
-        "lr_scheduler": lr_scheduler.state_dict(),
-        "scaler": scaler.state_dict() if amp_enabled else None,
-        "steps": steps,
-        "epoch": epoch,
-        "best_loss": best_loss,
-        # 保存分层架构特有的状态
-        "hierarchical_stats": policy.get_performance_stats() if hasattr(policy, 'get_performance_stats') else {},
-        "layer_states": policy.get_layer_states() if hasattr(policy, 'get_layer_states') else {}
-    }
-    torch.save(checkpoint, output_directory / "hierarchical_learning_state.pth")
-    save_rng_state(output_directory / "rng_state.pth")
+    print(f"💾 正在保存训练状态...")
+    try:
+        checkpoint = {
+            "optimizer": optimizer.state_dict(),
+            "lr_scheduler": lr_scheduler.state_dict(),
+            "scaler": scaler.state_dict() if amp_enabled else None,
+            "steps": steps,
+            "epoch": epoch,
+            "best_loss": best_loss,
+            # 保存分层架构特有的状态
+            "hierarchical_stats": policy.get_performance_stats() if hasattr(policy, 'get_performance_stats') else {},
+            "layer_states": policy.get_layer_states() if hasattr(policy, 'get_layer_states') else {}
+        }
+
+        state_file = output_directory / "hierarchical_learning_state.pth"
+        torch.save(checkpoint, state_file)
+        print(f"✅ 训练状态保存成功: {state_file}")
+
+        # 保存随机数状态
+        rng_file = output_directory / "rng_state.pth"
+        save_rng_state(rng_file)
+        print(f"✅ 随机数状态保存成功: {rng_file}")
+
+    except Exception as e:
+        print(f"❌ 训练状态保存失败: {e}")
 
 
 @hydra.main(config_path="../configs/policy/", config_name="humanoid_diffusion_config", version_base=None)
@@ -241,14 +318,16 @@ def main(cfg: DictConfig):
     print("🤖 Hierarchical Humanoid Diffusion Policy Training")
     print("=" * 60)
     print("Config: {}".format(cfg.defaults))
-    print("Use hierarchical: {}".format(cfg.policy.get('use_hierarchical', False)))
+    print("Use hierarchical: {}".format(
+        cfg.policy.get('use_hierarchical', False)))
 
     # 验证分层架构配置
     if not cfg.policy.get('use_hierarchical', False):
         print("⚠️  Warning: use_hierarchical is False. Set it to True in config to use hierarchical architecture.")
 
     # 设置输出目录
-    output_directory = Path(cfg.training.output_directory) / "run_{}".format(cfg.timestamp)
+    output_directory = Path(cfg.training.output_directory) / \
+        "run_{}".format(cfg.timestamp)
     output_directory.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir=str(output_directory))
 
@@ -260,8 +339,10 @@ def main(cfg: DictConfig):
     print("Original dataset features:", dataset_metadata.features)
 
     features = dataset_to_policy_features(dataset_metadata.features)
-    input_features = {k: ft for k, ft in features.items() if ft.type is not FeatureType.ACTION}
-    output_features = {k: ft for k, ft in features.items() if ft.type is FeatureType.ACTION}
+    input_features = {k: ft for k, ft in features.items(
+    ) if ft.type is not FeatureType.ACTION}
+    output_features = {k: ft for k,
+                       ft in features.items() if ft.type is FeatureType.ACTION}
 
     print("Input features: {}".format(input_features))
     print("Output features: {}".format(output_features))
@@ -271,14 +352,17 @@ def main(cfg: DictConfig):
     print("Policy config:", policy_cfg)
 
     # 构建分层architecture的policy
-    policy = build_hierarchical_policy(policy_cfg, dataset_stats=dataset_metadata.stats)
-    optimizer, lr_scheduler = build_optimizer_and_scheduler(policy, cfg, dataset_metadata.info["total_frames"])
+    policy = build_hierarchical_policy(
+        policy_cfg, dataset_stats=dataset_metadata.stats)
+    optimizer, lr_scheduler = build_optimizer_and_scheduler(
+        policy, cfg, dataset_metadata.info["total_frames"])
 
     # AMP支持 - 复用train_policy.py的实现
     amp_requested = bool(getattr(cfg.policy, "use_amp", False))
     amp_enabled = amp_requested and device.type == "cuda"
 
     has_torch_autocast = hasattr(torch, "autocast")
+
     def make_autocast(enabled: bool):
         if not enabled:
             return nullcontext()
@@ -290,7 +374,8 @@ def main(cfg: DictConfig):
                 return cuda_autocast()
         return nullcontext()
 
-    scaler = torch.amp.GradScaler(device=device.type, enabled=amp_enabled) if hasattr(torch, "amp") else torch.cuda.amp.GradScaler(device=device.type, enabled=amp_enabled)
+    scaler = torch.amp.GradScaler(device=device.type, enabled=amp_enabled) if hasattr(
+        torch, "amp") else torch.cuda.amp.GradScaler(device=device.type, enabled=amp_enabled)
 
     # 初始化训练状态
     start_epoch = 0
@@ -299,13 +384,15 @@ def main(cfg: DictConfig):
 
     # 恢复训练逻辑 - 专用于分层架构
     if cfg.training.resume and cfg.training.resume_timestamp:
-        resume_path = Path(cfg.training.output_directory) / cfg.training.resume_timestamp
+        resume_path = Path(cfg.training.output_directory) / \
+            cfg.training.resume_timestamp
         print("Resuming hierarchical training from:", resume_path)
         try:
             load_rng_state(resume_path / "rng_state.pth")
             policy = policy.from_pretrained(resume_path, strict=True)
 
-            optimizer, lr_scheduler = build_optimizer_and_scheduler(policy, cfg, dataset_metadata.info["total_frames"])
+            optimizer, lr_scheduler = build_optimizer_and_scheduler(
+                policy, cfg, dataset_metadata.info["total_frames"])
 
             # 加载分层架构专用的状态
             checkpoint_file = resume_path / "hierarchical_learning_state.pth"
@@ -333,17 +420,20 @@ def main(cfg: DictConfig):
             for file in resume_path.glob("events.*"):
                 shutil.copy(file, output_directory)
 
-            print("Resumed hierarchical training from epoch {}, step {}".format(start_epoch, steps))
+            print("Resumed hierarchical training from epoch {}, step {}".format(
+                start_epoch, steps))
         except Exception as e:
             print("Failed to load hierarchical checkpoint:", e)
             return
     else:
         print("Training hierarchical architecture from scratch!")
         # 初始化optimizer和lr_scheduler（非resume情况）
-        optimizer, lr_scheduler = build_optimizer_and_scheduler(policy, cfg, dataset_metadata.info["total_frames"])
+        optimizer, lr_scheduler = build_optimizer_and_scheduler(
+            policy, cfg, dataset_metadata.info["total_frames"])
 
     policy.train().to(device)
-    print("Total parameters: {:,}".format(sum(p.numel() for p in policy.parameters())))
+    print("Total parameters: {:,}".format(
+        sum(p.numel() for p in policy.parameters())))
     print("Using AMP: {}".format(amp_enabled))
 
     # 打印分层架构信息
@@ -356,17 +446,20 @@ def main(cfg: DictConfig):
 
     # Episode限制逻辑 - 复用train_policy.py的实现
     episodes_to_use = getattr(cfg, 'episodes_to_use', None)
-    print("Raw episodes_to_use from config: {}, type: {}".format(episodes_to_use, type(episodes_to_use)))
+    print("Raw episodes_to_use from config: {}, type: {}".format(
+        episodes_to_use, type(episodes_to_use)))
     if episodes_to_use is not None:
         if isinstance(episodes_to_use, int):
             episodes_to_use = list(range(episodes_to_use))
         elif hasattr(episodes_to_use, '__len__') and len(episodes_to_use) == 2:
             start, end = int(episodes_to_use[0]), int(episodes_to_use[1])
             episodes_to_use = list(range(start, end + 1))
-            print("Converted range [{}, {}] to {} episodes".format(start, end, len(episodes_to_use)))
+            print("Converted range [{}, {}] to {} episodes".format(
+                start, end, len(episodes_to_use)))
         elif hasattr(episodes_to_use, '__iter__'):
             episodes_to_use = list(episodes_to_use)
-        print("Using limited episodes for memory efficiency: {} episodes".format(len(episodes_to_use)))
+        print("Using limited episodes for memory efficiency: {} episodes".format(
+            len(episodes_to_use)))
     else:
         episodes_to_use = None
         print("Using all available episodes")
@@ -384,10 +477,12 @@ def main(cfg: DictConfig):
     use_curriculum = curriculum_config.get('enable', False)
 
     # 检查课程学习配置，支持 'stages' 或 'universal_stages'
-    stages_config = curriculum_config.get('stages') or curriculum_config.get('universal_stages')
+    stages_config = curriculum_config.get(
+        'stages') or curriculum_config.get('universal_stages')
 
     if use_curriculum and stages_config:
-        print("🎓 Starting curriculum learning with {} stages".format(len(stages_config)))
+        print("🎓 Starting curriculum learning with {} stages".format(
+            len(stages_config)))
 
         # 运行课程学习阶段
         current_step = steps
@@ -412,12 +507,13 @@ def main(cfg: DictConfig):
             prefetch_factor=1,
         )
 
-        epoch_bar = tqdm(dataloader, desc="Epoch {}/{}".format(epoch+1, cfg.training.max_epoch))
+        epoch_bar = tqdm(
+            dataloader, desc="Epoch {}/{}".format(epoch+1, cfg.training.max_epoch))
 
         total_loss = 0.0
         for batch in epoch_bar:
             batch = {k: (v.to(device, non_blocking=True) if isinstance(v, torch.Tensor) else v)
-                    for k, v in batch.items()}
+                     for k, v in batch.items()}
 
             with make_autocast(amp_enabled):
                 loss, hierarchical_info = policy.forward(batch)
@@ -441,13 +537,15 @@ def main(cfg: DictConfig):
             # 记录训练日志 - 包含分层架构特有的信息
             if steps % cfg.training.log_freq == 0:
                 writer.add_scalar("train/loss", scaled_loss.item(), steps)
-                writer.add_scalar("train/lr", lr_scheduler.get_last_lr()[0], steps)
+                writer.add_scalar(
+                    "train/lr", lr_scheduler.get_last_lr()[0], steps)
 
                 # 记录分层架构特有的统计信息
                 if isinstance(hierarchical_info, dict):
                     for key, value in hierarchical_info.items():
                         if isinstance(value, (int, float)):
-                            writer.add_scalar("hierarchical/{}".format(key), value, steps)
+                            writer.add_scalar(
+                                "hierarchical/{}".format(key), value, steps)
 
                 # 记录各层性能统计
                 if hasattr(policy, 'get_performance_stats'):
@@ -456,7 +554,8 @@ def main(cfg: DictConfig):
                         if isinstance(stats, dict):
                             for stat_name, stat_value in stats.items():
                                 if isinstance(stat_value, (int, float)):
-                                    writer.add_scalar("performance/{}/{}".format(layer_name, stat_name), stat_value, steps)
+                                    writer.add_scalar(
+                                        "performance/{}/{}".format(layer_name, stat_name), stat_value, steps)
 
                 epoch_bar.set_postfix(
                     loss="{:.3f}".format(scaled_loss.item()),
@@ -474,7 +573,8 @@ def main(cfg: DictConfig):
 
         # 定期保存检查点
         if (epoch + 1) % cfg.training.save_freq_epoch == 0:
-            policy.save_pretrained(output_directory / "epoch{}".format(epoch+1))
+            policy.save_pretrained(
+                output_directory / "epoch{}".format(epoch+1))
 
         # 保存最新的分层架构检查点
         save_hierarchical_checkpoint(
