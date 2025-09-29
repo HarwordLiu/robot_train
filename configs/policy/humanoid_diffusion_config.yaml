@@ -27,7 +27,7 @@ training:
   ema_power: 0.75
 
   batch_size: 64 # 分层架构使用稍小的batch size
-  num_workers: 24
+  num_workers: 20
   drop_last: False
 
   max_training_step: null
