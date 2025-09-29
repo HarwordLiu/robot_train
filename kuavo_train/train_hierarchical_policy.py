@@ -134,7 +134,8 @@ def build_hierarchical_policy(policy_cfg, dataset_stats):
     return HumanoidDiffusionPolicy(policy_cfg, dataset_stats)
 
 
-def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, writer, current_step):
+def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, writer, current_step,
+                                 optimizer=None, lr_scheduler=None, scaler=None, output_directory=None, amp_enabled=False):
     """运行课程学习的单个阶段"""
     stage_name = stage_config.get("name", "unknown")
     enabled_layers = stage_config.get("layers", [])
@@ -159,8 +160,13 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
     )
 
     stage_steps = 0
+    best_stage_loss = float('inf')
+
     for epoch in range(stage_epochs):
         epoch_bar = tqdm(dataloader, desc="Stage {} Epoch {}/{}".format(stage_name, epoch+1, stage_epochs))
+
+        total_epoch_loss = 0.0
+        epoch_samples = 0
 
         for batch in epoch_bar:
             batch = {k: (v.to(device, non_blocking=True) if isinstance(v, torch.Tensor) else v)
@@ -177,9 +183,31 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
                 writer.add_scalar("curriculum/{}/loss".format(stage_name), loss.item(), current_step + stage_steps)
                 epoch_bar.set_postfix(loss="{:.3f}".format(loss.item()), stage=stage_name)
 
+            total_epoch_loss += loss.item()
+            epoch_samples += 1
             stage_steps += 1
 
-    print("✅ Completed curriculum stage: {}".format(stage_name))
+        # 计算平均epoch损失
+        avg_epoch_loss = total_epoch_loss / max(epoch_samples, 1)
+
+        # 保存最佳模型
+        if avg_epoch_loss < best_stage_loss and output_directory is not None:
+            best_stage_loss = avg_epoch_loss
+            policy.save_pretrained(output_directory / "curriculum_{}_best".format(stage_name))
+
+        # 定期保存检查点
+        if output_directory is not None and (epoch + 1) % cfg.training.save_freq_epoch == 0:
+            policy.save_pretrained(output_directory / "curriculum_{}_epoch{}".format(stage_name, epoch + 1))
+
+            # 保存课程学习阶段的详细状态
+            if optimizer is not None and lr_scheduler is not None:
+                save_hierarchical_checkpoint(
+                    policy, optimizer, lr_scheduler, scaler,
+                    current_step + stage_steps, epoch + 1, best_stage_loss,
+                    output_directory, amp_enabled
+                )
+
+    print("✅ Completed curriculum stage: {} (best loss: {:.4f})".format(stage_name, best_stage_loss))
     return current_step + stage_steps
 
 
@@ -311,6 +339,8 @@ def main(cfg: DictConfig):
             return
     else:
         print("Training hierarchical architecture from scratch!")
+        # 初始化optimizer和lr_scheduler（非resume情况）
+        optimizer, lr_scheduler = build_optimizer_and_scheduler(policy, cfg, dataset_metadata.info["total_frames"])
 
     policy.train().to(device)
     print("Total parameters: {:,}".format(sum(p.numel() for p in policy.parameters())))
@@ -353,14 +383,18 @@ def main(cfg: DictConfig):
     curriculum_config = cfg.get('curriculum_learning', {})
     use_curriculum = curriculum_config.get('enable', False)
 
-    if use_curriculum and 'stages' in curriculum_config:
-        print("🎓 Starting curriculum learning with {} stages".format(len(curriculum_config['stages'])))
+    # 检查课程学习配置，支持 'stages' 或 'universal_stages'
+    stages_config = curriculum_config.get('stages') or curriculum_config.get('universal_stages')
+
+    if use_curriculum and stages_config:
+        print("🎓 Starting curriculum learning with {} stages".format(len(stages_config)))
 
         # 运行课程学习阶段
         current_step = steps
-        for stage_name, stage_config in curriculum_config['stages'].items():
+        for stage_name, stage_config in stages_config.items():
             current_step = run_curriculum_learning_stage(
-                policy, stage_config, dataset, cfg, device, writer, current_step
+                policy, stage_config, dataset, cfg, device, writer, current_step,
+                optimizer, lr_scheduler, scaler, output_directory, amp_enabled
             )
 
         print("✅ Curriculum learning completed. Starting full training...")
