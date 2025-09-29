@@ -128,23 +128,28 @@ class TaskSpecificTrainingManager:
                     if hasattr(curriculum_config, 'universal_stages'):
                         universal_stages = curriculum_config.universal_stages
 
-                        # 将universal_stages映射到任务1的课程学习
-                        task1_stages = {}
-                        stage_mapping = {
-                            'stage1': 'stage1',
-                            'stage2': 'stage2',
-                            'stage3': 'stage3',
-                            'stage4': 'stage3'  # 将stage4映射到stage3
+                        # 直接覆盖任务1的课程学习阶段
+                        self.task_curriculum_stages[1] = {
+                            "stage1": {
+                                "name": "safety_reflex",
+                                "layers": ["safety"],
+                                "epochs": universal_stages.get("stage1", {}).get("epochs", 1)
+                            },
+                            "stage2": {
+                                "name": "basic_manipulation",
+                                "layers": ["safety", "manipulation"],
+                                "epochs": universal_stages.get("stage2", {}).get("epochs", 1)
+                            },
+                            "stage3": {
+                                "name": "full_grasping",
+                                "layers": ["safety", "gait", "manipulation"],
+                                "epochs": universal_stages.get("stage3", {}).get("epochs", 1)
+                            }
                         }
 
-                        for stage_name, stage_config in universal_stages.items():
-                            if stage_name in stage_mapping:
-                                mapped_name = stage_mapping[stage_name]
-
-                                # 更新epochs设置
-                                if mapped_name in self.task_curriculum_stages[1]:
-                                    self.task_curriculum_stages[1][mapped_name]["epochs"] = stage_config.get("epochs", 30)
-                                    print(f"📝 从配置文件更新 {mapped_name} epochs: {stage_config.get('epochs', 30)}")
+                        print(f"📝 从配置文件完全重构课程学习:")
+                        for stage_name, stage_config in self.task_curriculum_stages[1].items():
+                            print(f"   {stage_name}: {stage_config['epochs']} epochs, 层: {stage_config['layers']}")
 
                         print("✅ 成功从配置文件加载课程学习epochs设置")
 
