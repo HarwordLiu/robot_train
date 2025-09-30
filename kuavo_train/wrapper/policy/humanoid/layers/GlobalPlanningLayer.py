@@ -34,11 +34,11 @@ class GlobalPlanningLayer(BaseLayer):
         visual_dim = 1280  # EfficientNet-B0输出
         state_shape = getattr(base_config, 'robot_state_feature', None)
         if state_shape and hasattr(state_shape, 'shape'):
-            state_dim = state_shape.shape[0]
+            self.state_dim = state_shape.shape[0]
         else:
             # 默认配置：only_arm=true时的双臂+手爪配置
-            state_dim = 16
-        self.input_projection = nn.Linear(visual_dim + state_dim, self.hidden_size)
+            self.state_dim = 16
+        self.input_projection = nn.Linear(visual_dim + self.state_dim, self.hidden_size)
 
         # 大型Transformer用于复杂推理
         encoder_layer = nn.TransformerEncoderLayer(
@@ -56,8 +56,8 @@ class GlobalPlanningLayer(BaseLayer):
         # 任务分解模块
         self.task_decomposer = TaskDecompositionModule(self.hidden_size)
 
-        # 输出投影
-        self.action_head = nn.Linear(self.hidden_size, 32)
+        # 输出投影 - 动作维度应该与状态维度一致
+        self.action_head = nn.Linear(self.hidden_size, self.state_dim)
         self.plan_head = nn.Linear(self.hidden_size, 64)  # 规划输出
 
     def should_activate(self, inputs: Dict[str, torch.Tensor], context: Optional[Dict[str, Any]] = None) -> bool:
@@ -134,7 +134,7 @@ class GlobalPlanningLayer(BaseLayer):
         device = list(inputs.values())[0].device
 
         zero_features = torch.zeros(batch_size, 10, self.hidden_size, device=device)
-        zero_action = torch.zeros(batch_size, 32, device=device)
+        zero_action = torch.zeros(batch_size, self.state_dim, device=device)
         zero_plan = torch.zeros(batch_size, 64, device=device)
 
         return {

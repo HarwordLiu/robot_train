@@ -55,10 +55,10 @@ class ManipulationLayer(BaseLayer):
         self.constraint_solver = ConstraintSatisfactionModule(self.hidden_size)
 
         # 双臂协调模块
-        self.bimanual_coordinator = BimanualCoordinationModule(self.hidden_size)
+        self.bimanual_coordinator = BimanualCoordinationModule(self.hidden_size, self.state_dim)
 
-        # 输出投影
-        self.action_head = nn.Linear(self.hidden_size, 32)  # 动作输出
+        # 输出投影 - 动作维度应该与状态维度一致
+        self.action_head = nn.Linear(self.hidden_size, self.state_dim)  # 动作输出
 
     def should_activate(self, inputs: Dict[str, torch.Tensor], context: Optional[Dict[str, Any]] = None) -> bool:
         """当需要精细操作时激活"""
@@ -154,7 +154,7 @@ class ManipulationLayer(BaseLayer):
         device = list(inputs.values())[0].device
 
         zero_features = torch.zeros(batch_size, 10, self.hidden_size, device=device)
-        zero_action = torch.zeros(batch_size, 32, device=device)
+        zero_action = torch.zeros(batch_size, self.state_dim, device=device)
 
         return {
             'manipulation_features': zero_features,
@@ -192,13 +192,14 @@ class ConstraintSatisfactionModule(nn.Module):
 class BimanualCoordinationModule(nn.Module):
     """双臂协调模块"""
 
-    def __init__(self, feature_dim: int):
+    def __init__(self, feature_dim: int, action_dim: int = 16):
         super().__init__()
         self.feature_dim = feature_dim
+        self.action_dim = action_dim
         self.coordination_net = nn.Sequential(
             nn.Linear(feature_dim, feature_dim),
             nn.ReLU(),
-            nn.Linear(feature_dim, 32)  # 输出协调动作
+            nn.Linear(feature_dim, action_dim)  # 输出协调动作
         )
 
     def forward(self, features: torch.Tensor, context: Optional[Dict[str, Any]] = None) -> torch.Tensor:

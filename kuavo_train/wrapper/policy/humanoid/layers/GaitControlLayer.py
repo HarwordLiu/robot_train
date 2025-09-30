@@ -59,8 +59,8 @@ class GaitControlLayer(BaseLayer):
         # 负载适应模块
         self.load_adapter = LoadAdaptationModule(self.gru_hidden)
 
-        # 输出投影
-        self.output_projection = nn.Linear(self.gru_hidden, 32)  # 假设32维关节输出
+        # 输出投影 - 动作维度应该与输入维度一致
+        self.output_projection = nn.Linear(self.gru_hidden, self.input_dim)
 
     def should_activate(self, inputs: Dict[str, torch.Tensor], context: Optional[Dict[str, Any]] = None) -> bool:
         """当机器人需要移动时激活"""
@@ -126,7 +126,7 @@ class GaitControlLayer(BaseLayer):
     def _generate_default_output(self, batch_size: int, device: torch.device) -> Dict[str, Any]:
         """生成默认输出"""
         zero_features = torch.zeros(batch_size, 10, self.gru_hidden, device=device)
-        zero_action = torch.zeros(batch_size, 32, device=device)
+        zero_action = torch.zeros(batch_size, self.input_dim, device=device)
 
         return {
             'gait_features': zero_features,
