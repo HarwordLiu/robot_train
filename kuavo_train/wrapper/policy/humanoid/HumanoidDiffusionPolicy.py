@@ -373,9 +373,9 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         # 任务识别
         task_info = self._identify_task(batch)
 
-        # 分层推理（可能只激活部分层以满足实时性要求）
+        # 分层推理（离线评估时使用标准模式）
         with torch.no_grad():
-            layer_outputs = self.scheduler.inference_mode(batch, task_info)
+            layer_outputs = self.scheduler(batch, task_info)
 
         # 从分层输出中提取最终动作
         return self._extract_action_from_layers(layer_outputs, batch)
