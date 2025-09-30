@@ -102,19 +102,15 @@ class ManipulationLayer(BaseLayer):
         """提取并融合多模态特征"""
         features_list = []
 
-        print(f"🔍 ManipulationLayer: Available input keys: {list(inputs.keys())}")
-
         # 状态特征
         if 'observation.state' in inputs:
             state_features = inputs['observation.state']
-            print(f"🔍 ManipulationLayer: state_features.shape = {state_features.shape}")
             # 处理维度：确保是3D tensor [batch_size, seq_len, state_dim]
             if len(state_features.shape) == 1:
                 state_features = state_features.unsqueeze(0).unsqueeze(0)  # [1, 1, state_dim]
             elif len(state_features.shape) == 2:
                 state_features = state_features.unsqueeze(1)  # [batch_size, 1, state_dim]
             features_list.append(state_features)
-            print(f"🔍 ManipulationLayer: Processed state_features.shape = {state_features.shape}")
 
         # 视觉特征（如果可用）
         if 'observation.images' in inputs:
@@ -140,12 +136,7 @@ class ManipulationLayer(BaseLayer):
 
         # 特征拼接和投影
         combined_features = torch.cat(features_list, dim=-1)
-        print(f"🔍 ManipulationLayer: combined_features.shape = {combined_features.shape}")
-        print(f"🔍 ManipulationLayer: input_projection expects: {self.input_projection.in_features}")
-
         projected_features = self.input_projection(combined_features)
-        print(f"🔍 ManipulationLayer: projected_features.shape = {projected_features.shape}")
-
         return projected_features
 
     def _generate_default_output(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, Any]:

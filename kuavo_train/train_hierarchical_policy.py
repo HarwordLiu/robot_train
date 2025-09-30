@@ -149,11 +149,13 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
     enabled_layers = stage_config.get("layers", [])
     stage_epochs = stage_config.get("epochs", 10)
 
-    # 测试训练模式：强制每个阶段只跑1个epoch
+    # 测试训练模式：使用配置的测试epoch数量
     test_training_mode = cfg.training.get('test_training_mode', False)
     if test_training_mode:
-        stage_epochs = 1
-        print(f"🧪 TEST MODE: Overriding {stage_name} stage epochs from {stage_config.get('epochs', 10)} to 1")
+        original_epochs = stage_epochs
+        test_epochs = cfg.training.get('test_training_epochs', 1)
+        stage_epochs = test_epochs
+        print(f"🧪 TEST MODE: Overriding {stage_name} stage epochs from {original_epochs} to {test_epochs}")
 
     print("🎓 Starting curriculum stage: {} (layers: {}, epochs: {})".format(
         stage_name, enabled_layers, stage_epochs))
@@ -348,8 +350,9 @@ def main(cfg: DictConfig):
         cfg.policy.get('use_hierarchical', False)))
 
     if test_training_mode:
-        print("🧪 TEST TRAINING MODE ENABLED - Running 1 epoch per stage for quick validation")
-        print("⚡ All curriculum stages will be reduced to 1 epoch")
+        test_epochs = cfg.training.get('test_training_epochs', 1)
+        print(f"🧪 TEST TRAINING MODE ENABLED - Running {test_epochs} epoch(s) per stage for quick validation")
+        print(f"⚡ All curriculum stages will be reduced to {test_epochs} epoch(s)")
         print("💾 Automatic saving enabled after each stage")
 
     # 验证分层架构配置

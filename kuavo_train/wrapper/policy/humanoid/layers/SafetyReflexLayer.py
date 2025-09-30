@@ -106,7 +106,6 @@ class SafetyReflexLayer(BaseLayer):
         robot_state = inputs['observation.state']
 
         # 处理不同维度的输入
-        print(f"🔍 SafetyReflexLayer: robot_state.shape = {robot_state.shape}")
 
         if len(robot_state.shape) == 1:
             # [state_dim] -> [1, 1, state_dim]

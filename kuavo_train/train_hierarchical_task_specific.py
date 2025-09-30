@@ -286,12 +286,13 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
     stage_epochs = stage_config.get("epochs", 10)
     target_task = stage_config.get("target_task")
 
-    # 测试训练模式：强制每个阶段只跑1个epoch
+    # 测试训练模式：使用配置的测试epoch数量
     test_training_mode = cfg.training.get('test_training_mode', False)
     if test_training_mode:
         original_epochs = stage_epochs
-        stage_epochs = 1
-        print(f"🧪 TEST MODE: Overriding {stage_name} stage epochs from {original_epochs} to 1")
+        test_epochs = cfg.training.get('test_training_epochs', 1)
+        stage_epochs = test_epochs
+        print(f"🧪 TEST MODE: Overriding {stage_name} stage epochs from {original_epochs} to {test_epochs}")
 
     print(f"🎓 开始任务特定课程阶段: {stage_name}")
     print(f"   激活层: {enabled_layers}")
@@ -542,8 +543,9 @@ def main(cfg: DictConfig):
         f"任务特定训练: {cfg.get('task_specific_training', {}).get('enable', False)}")
 
     if test_training_mode:
-        print("🧪 TEST TRAINING MODE ENABLED - Running 1 epoch per curriculum stage")
-        print("⚡ All curriculum stages will be reduced to 1 epoch for quick validation")
+        test_epochs = cfg.training.get('test_training_epochs', 1)
+        print(f"🧪 TEST TRAINING MODE ENABLED - Running {test_epochs} epoch(s) per curriculum stage")
+        print(f"⚡ All curriculum stages will be reduced to {test_epochs} epoch(s) for quick validation")
         print("💾 Automatic saving enabled after each stage")
 
     # 验证配置

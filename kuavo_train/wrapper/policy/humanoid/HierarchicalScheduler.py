@@ -72,16 +72,12 @@ class HierarchicalScheduler(nn.Module):
         Returns:
             Dict: 各层的输出结果
         """
-        print(f"🔥 DEBUG: HierarchicalScheduler.forward() called")
-        print(f"🔥 DEBUG: task_info = {task_info}")
 
         # 检查是否应该使用inference_mode
         if task_info and 'latency_budget_ms' in task_info:
             latency_budget = task_info['latency_budget_ms']
-            print(f"🔥 DEBUG: Found latency_budget_ms={latency_budget}, switching to inference_mode")
             return self.inference_mode(batch, task_info, latency_budget)
 
-        print(f"🔥 DEBUG: Using standard forward mode")
         self.total_forward_calls += 1
         outputs = {}
         context = self._build_context(batch, task_info)
