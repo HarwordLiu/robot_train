@@ -20,6 +20,46 @@ model:
   type: 'humanoid_diffusion' # 模型类型标识
   # 完整的检查点路径（用户需要根据实际情况修改）
   checkpoint_path: 'outputs/train/task_400_episodes/humanoid_hierarchical/task_specific_run_20250930_030432/curriculum_basic_manipulation_epoch40'
+  use_hierarchical: true # 启用分层架构
+
+# 分层架构核心配置（用于构建模型）
+hierarchical:
+  # 层权重配置
+  layer_weights:
+    safety: 2.0
+    gait: 1.5
+    manipulation: 1.0
+    planning: 0.8
+
+  # 各层的具体配置
+  layers:
+    safety:
+      enabled: true
+      hidden_size: 64
+      output_dim: 16
+      emergency_threshold: 0.8
+      tilt_threshold_degrees: 15.0
+      input_dim: 16
+
+    gait:
+      enabled: false  # 仅手臂任务，禁用步态层
+      hidden_size: 128
+      output_dim: 16
+      input_dim: 16
+
+    manipulation:
+      enabled: true
+      hidden_size: 512
+      layers: 3
+      heads: 8
+      dim_feedforward: 2048
+
+    planning:
+      enabled: false  # 测试时禁用规划层
+      hidden_size: 256
+      layers: 2
+      heads: 4
+      dim_feedforward: 1024
 
 # 分层架构特有评估配置
 hierarchical_evaluation:

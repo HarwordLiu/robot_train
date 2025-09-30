@@ -39,11 +39,7 @@ class ManipulationLayer(BaseLayer):
             # 默认配置：only_arm=true时的双臂+手爪配置
             state_dim = 16
 
-        # 输入投影层需要动态适配实际输入维度
-        # 这里设置一个合理的默认值，实际使用时会根据输入动态调整
-        self.expected_visual_dim = visual_dim
-        self.expected_state_dim = state_dim
-        self.input_projection = None  # 延迟初始化
+        self.input_projection = nn.Linear(visual_dim + state_dim, self.hidden_size)
 
         # 主要的Transformer网络
         encoder_layer = nn.TransformerEncoderLayer(
@@ -109,9 +105,6 @@ class ManipulationLayer(BaseLayer):
         # 状态特征
         if 'observation.state' in inputs:
             state_features = inputs['observation.state']
-            # 处理维度：确保是3D tensor [batch_size, seq_len, state_dim]
-            if len(state_features.shape) == 2:
-                state_features = state_features.unsqueeze(1)  # [batch_size, 1, state_dim]
             features_list.append(state_features)
 
         # 视觉特征（如果可用）
@@ -120,24 +113,13 @@ class ManipulationLayer(BaseLayer):
             visual_features = inputs['observation.images']
             if len(visual_features.shape) > 3:
                 visual_features = visual_features.mean(dim=(-2, -1))  # 全局平均池化
-            # 确保是3D tensor
-            if len(visual_features.shape) == 2:
-                visual_features = visual_features.unsqueeze(1)
             features_list.append(visual_features)
 
         if not features_list:
             return None
 
-        # 特征拼接
+        # 特征拼接和投影
         combined_features = torch.cat(features_list, dim=-1)
-
-        # 动态初始化输入投影层（如果还没有初始化）
-        if self.input_projection is None:
-            input_dim = combined_features.shape[-1]
-            self.input_projection = nn.Linear(input_dim, self.hidden_size).to(combined_features.device)
-            print(f"✅ Dynamically initialized input projection: {input_dim} -> {self.hidden_size}")
-
-        # 投影到隐藏维度
         projected_features = self.input_projection(combined_features)
 
         return projected_features

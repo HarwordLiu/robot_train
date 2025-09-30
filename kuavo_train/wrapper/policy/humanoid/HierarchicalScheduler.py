@@ -40,7 +40,6 @@ class HierarchicalScheduler(nn.Module):
         layers = nn.ModuleDict()
 
         layer_configs = self.config.get('layers', {})
-        print(f"🔍 Available layer configs: {list(layer_configs.keys())}")
 
         # 按优先级顺序构建层
         layer_builders = {
@@ -59,12 +58,7 @@ class HierarchicalScheduler(nn.Module):
                     print(f"✅ {layer_name} layer created successfully")
                 except Exception as e:
                     print(f"❌ Failed to create {layer_name} layer: {e}")
-                    import traceback
-                    traceback.print_exc()
-            else:
-                print(f"⚠️ No config found for {layer_name} layer")
 
-        print(f"🏗️ Total layers built: {len(layers)} - {list(layers.keys())}")
         return layers
 
     def forward(self, batch: Dict[str, torch.Tensor], task_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -82,30 +76,21 @@ class HierarchicalScheduler(nn.Module):
         outputs = {}
         context = self._build_context(batch, task_info)
 
-        print(f"🔄 Starting hierarchical forward pass with {len(self.layers)} layers available")
-        processing_order = self._get_processing_order()
-        print(f"🔄 Processing order: {processing_order}")
-
         # 按优先级顺序处理各层
-        for layer_name in processing_order:
+        for layer_name in self._get_processing_order():
             if layer_name not in self.layers:
-                print(f"⚠️ Layer {layer_name} not found in available layers")
                 continue
             layer = self.layers[layer_name]
 
             # 检查是否应该激活该层
-            should_activate = layer.should_activate(batch, context)
-            print(f"🔍 Layer {layer_name} should_activate: {should_activate}")
-            if not should_activate:
+            if not layer.should_activate(batch, context):
                 continue
 
             # 执行层的前向传播（带时间监控）
             try:
-                print(f"🚀 Executing layer {layer_name}")
                 layer_output = layer.forward_with_timing(batch, context)
                 outputs[layer_name] = layer_output
                 self.layer_activation_stats[layer_name] += 1
-                print(f"✅ Layer {layer_name} executed successfully, output keys: {list(layer_output.keys())}")
 
                 # 更新上下文
                 context.update(layer_output)
@@ -117,15 +102,12 @@ class HierarchicalScheduler(nn.Module):
 
             except Exception as e:
                 print(f"❌ Error in {layer_name} layer: {e}")
-                import traceback
-                traceback.print_exc()
                 outputs[layer_name] = {
                     'layer': layer_name,
                     'error': str(e),
                     'execution_time_ms': 0
                 }
 
-        print(f"🎯 Forward pass completed with {len(outputs)} active layers: {list(outputs.keys())}")
         return outputs
 
     def inference_mode(self,

@@ -29,6 +29,7 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
                  dataset_stats: Optional[Dict[str,
                                               Dict[str, torch.Tensor]]] = None,
                  use_hierarchical: Optional[bool] = None,
+                 hierarchical: Optional[Dict[str, Any]] = None,
                  **kwargs):
         """
         初始化分层Diffusion Policy
@@ -48,10 +49,13 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         if self.use_hierarchical:
             # 使用分层架构
             super().__init__(config, dataset_stats)
-            self._init_hierarchical_components(config)
+
+            # 如果提供了外部hierarchical配置，使用它；否则从config中获取
+            hierarchical_config = hierarchical if hierarchical is not None else getattr(config, 'hierarchical', {})
+            self._init_hierarchical_components(config, hierarchical_config)
 
             # 初始化任务条件权重系统
-            self._init_task_conditional_weights(config)
+            self._init_task_conditional_weights(config, hierarchical_config)
         else:
             # 向后兼容：使用原有架构
             super().__init__(config, dataset_stats)
@@ -59,14 +63,13 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             self.task_layer_weights = None
             self.current_curriculum_stage = None
 
-    def _init_hierarchical_components(self, config):
+    def _init_hierarchical_components(self, config, hierarchical_config):
         """初始化分层架构组件"""
         try:
             # 替换原有的diffusion模型为分层版本
             self.diffusion = HierarchicalDiffusionModel(config)
 
             # 创建分层调度器
-            hierarchical_config = getattr(config, 'hierarchical', {})
             self.scheduler = HierarchicalScheduler(hierarchical_config, config)
 
             print(
@@ -78,11 +81,10 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             self.use_hierarchical = False
             self.scheduler = None
 
-    def _init_task_conditional_weights(self, config):
+    def _init_task_conditional_weights(self, config, hierarchical_config):
         """初始化任务条件权重系统"""
         try:
             # 默认层权重
-            hierarchical_config = getattr(config, 'hierarchical', {})
             self.default_layer_weights = hierarchical_config.get('layer_weights', {
                 'safety': 2.0,
                 'gait': 1.5,
@@ -516,9 +518,42 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
-        """从预训练模型加载（保持与父类接口兼容）"""
-        # TODO: 实现分层架构的模型加载逻辑
-        return super().from_pretrained(*args, **kwargs)
+        """从预训练模型加载（分层架构专用）"""
+
+        # 提取分层架构相关参数
+        use_hierarchical = kwargs.pop('use_hierarchical', None)
+        hierarchical_config = kwargs.pop('hierarchical', None)
+
+        # 如果没有指定，尝试从配置中推断
+        if use_hierarchical is None:
+            if len(args) > 0:
+                pretrained_path = args[0]
+            else:
+                pretrained_path = kwargs.get('pretrained_name_or_path')
+
+            if pretrained_path and 'hierarchical' in str(pretrained_path):
+                use_hierarchical = True
+                print(f"🔍 检测到分层架构模型路径，启用分层架构")
+
+        # 如果需要启用分层架构，将参数传递给构造函数
+        if use_hierarchical:
+            kwargs['use_hierarchical'] = True
+            if hierarchical_config:
+                kwargs['hierarchical'] = hierarchical_config
+
+        # 调用父类方法进行基础加载
+        instance = super().from_pretrained(*args, **kwargs)
+
+        # 验证分层架构是否正确加载
+        if use_hierarchical:
+            if not hasattr(instance, 'scheduler') or instance.scheduler is None:
+                print(f"⚠️  分层架构组件未正确初始化，可能缺少hierarchical配置")
+                print(f"💡 请确保评估配置包含完整的hierarchical配置段")
+                instance.use_hierarchical = False  # 回退到传统模式
+            else:
+                print(f"✅ 分层架构模型加载成功，包含 {len(instance.scheduler.layers)} 个层")
+
+        return instance
 
 
 # 为了向后兼容性，创建别名
