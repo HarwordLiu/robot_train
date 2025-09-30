@@ -67,7 +67,7 @@ hierarchical_evaluation:
   enabled_layers: ['safety', 'manipulation'] # 测试时启用的层
 
   # 性能预算配置
-  latency_budget_ms: 100.0 # 推理延迟预算（毫秒）
+  latency_budget_ms: 500.0 # 推理延迟预算（毫秒）- 增加以允许离线评估
   enable_adaptive_inference: True # 启用自适应推理
 
   # 层激活分析

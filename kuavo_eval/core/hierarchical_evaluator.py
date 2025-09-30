@@ -97,6 +97,7 @@ class HierarchicalEvaluator(BaseEvaluator):
             'requires_manipulation': True,
             'safety_priority': True,
             'enabled_layers': self.config.hierarchical_evaluation.enabled_layers
+            # 注意：不传递latency_budget_ms，以使用标准forward模式进行离线评估
         }
 
         with torch.no_grad():
