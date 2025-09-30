@@ -106,7 +106,13 @@ class SafetyReflexLayer(BaseLayer):
         robot_state = inputs['observation.state']
 
         # 处理不同维度的输入
-        if len(robot_state.shape) == 2:
+        print(f"🔍 SafetyReflexLayer: robot_state.shape = {robot_state.shape}")
+
+        if len(robot_state.shape) == 1:
+            # [state_dim] -> [1, 1, state_dim]
+            robot_state = robot_state.unsqueeze(0).unsqueeze(0)
+            batch_size, seq_len, state_dim = robot_state.shape
+        elif len(robot_state.shape) == 2:
             # [batch_size, state_dim] -> [batch_size, 1, state_dim]
             robot_state = robot_state.unsqueeze(1)
             batch_size, seq_len, state_dim = robot_state.shape
@@ -114,7 +120,7 @@ class SafetyReflexLayer(BaseLayer):
             # [batch_size, seq_len, state_dim]
             batch_size, seq_len, state_dim = robot_state.shape
         else:
-            raise ValueError(f"Unexpected robot_state shape: {robot_state.shape}, expected 2D or 3D tensor")
+            raise ValueError(f"Unexpected robot_state shape: {robot_state.shape}, expected 1D, 2D or 3D tensor")
 
         # 如果输入维度不匹配，进行适配
         if state_dim != self.input_dim:

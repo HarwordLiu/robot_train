@@ -31,15 +31,15 @@ class ManipulationLayer(BaseLayer):
         self.dim_feedforward = config.get('dim_feedforward', 2048)
 
         # 特征维度计算（视觉+状态）- 适配实际机器人配置
-        visual_dim = 1280  # EfficientNet-B0输出
+        self.visual_dim = 1280  # EfficientNet-B0输出
         state_shape = getattr(base_config, 'robot_state_feature', None)
         if state_shape and hasattr(state_shape, 'shape'):
-            state_dim = state_shape.shape[0]
+            self.state_dim = state_shape.shape[0]
         else:
             # 默认配置：only_arm=true时的双臂+手爪配置
-            state_dim = 16
+            self.state_dim = 16
 
-        self.input_projection = nn.Linear(visual_dim + state_dim, self.hidden_size)
+        self.input_projection = nn.Linear(self.visual_dim + self.state_dim, self.hidden_size)
 
         # 主要的Transformer网络
         encoder_layer = nn.TransformerEncoderLayer(
@@ -102,13 +102,19 @@ class ManipulationLayer(BaseLayer):
         """提取并融合多模态特征"""
         features_list = []
 
+        print(f"🔍 ManipulationLayer: Available input keys: {list(inputs.keys())}")
+
         # 状态特征
         if 'observation.state' in inputs:
             state_features = inputs['observation.state']
+            print(f"🔍 ManipulationLayer: state_features.shape = {state_features.shape}")
             # 处理维度：确保是3D tensor [batch_size, seq_len, state_dim]
-            if len(state_features.shape) == 2:
+            if len(state_features.shape) == 1:
+                state_features = state_features.unsqueeze(0).unsqueeze(0)  # [1, 1, state_dim]
+            elif len(state_features.shape) == 2:
                 state_features = state_features.unsqueeze(1)  # [batch_size, 1, state_dim]
             features_list.append(state_features)
+            print(f"🔍 ManipulationLayer: Processed state_features.shape = {state_features.shape}")
 
         # 视觉特征（如果可用）
         if 'observation.images' in inputs:
@@ -126,7 +132,7 @@ class ManipulationLayer(BaseLayer):
                 batch_size, seq_len = features_list[0].shape[:2]
                 device = features_list[0].device
                 # 创建1280维的零视觉特征
-                zero_visual = torch.zeros(batch_size, seq_len, self.expected_visual_dim, device=device)
+                zero_visual = torch.zeros(batch_size, seq_len, self.visual_dim, device=device)
                 features_list.append(zero_visual)
 
         if not features_list:
@@ -134,7 +140,11 @@ class ManipulationLayer(BaseLayer):
 
         # 特征拼接和投影
         combined_features = torch.cat(features_list, dim=-1)
+        print(f"🔍 ManipulationLayer: combined_features.shape = {combined_features.shape}")
+        print(f"🔍 ManipulationLayer: input_projection expects: {self.input_projection.in_features}")
+
         projected_features = self.input_projection(combined_features)
+        print(f"🔍 ManipulationLayer: projected_features.shape = {projected_features.shape}")
 
         return projected_features
 
