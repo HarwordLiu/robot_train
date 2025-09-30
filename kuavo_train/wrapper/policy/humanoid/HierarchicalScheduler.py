@@ -132,9 +132,9 @@ class HierarchicalScheduler(nn.Module):
 
         # 按优先级顺序处理，在预算内尽可能多地激活层
         for layer_name in self._get_processing_order():
-            layer = self.layers.get(layer_name)
-            if layer is None:
+            if layer_name not in self.layers:
                 continue
+            layer = self.layers[layer_name]
 
             # 检查是否有足够的时间预算
             layer_budget = layer.get_latency_budget()
