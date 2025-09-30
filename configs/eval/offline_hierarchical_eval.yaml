@@ -49,17 +49,17 @@ hierarchical:
 
     manipulation:
       enabled: true
-      hidden_size: 512
+      hidden_size: 512  # 保持训练时配置
       layers: 3
       heads: 8
       dim_feedforward: 2048
 
     planning:
       enabled: false  # 测试时禁用规划层
-      hidden_size: 256
+      hidden_size: 1024  # 与训练时保持一致
       layers: 2
       heads: 4
-      dim_feedforward: 1024
+      dim_feedforward: 4096  # 通常是hidden_size的4倍
 
 # 分层架构特有评估配置
 hierarchical_evaluation:
