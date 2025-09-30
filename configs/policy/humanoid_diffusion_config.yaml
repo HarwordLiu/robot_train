@@ -27,12 +27,12 @@ training:
   ema_power: 0.75
 
   batch_size: 64 # 分层架构使用稍小的batch size
-  num_workers: 20
+  num_workers: 25
   drop_last: False
 
   max_training_step: null
   resume: True
-  resume_timestamp: task_specific_run_20250929_162818
+  resume_timestamp: task_specific_run_20250930_030432
 
   # 数据增广相关的配置
   RGB_Augmenter:
