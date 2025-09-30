@@ -32,7 +32,7 @@ training:
 
   max_training_step: null
   resume: True
-  resume_timestamp: task_specific_run_20250929_115908
+  resume_timestamp: task_specific_run_20250929_162818
 
   # 数据增广相关的配置
   RGB_Augmenter:
