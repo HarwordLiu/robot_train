@@ -7,104 +7,104 @@ defaults:
 
 # 测试数据配置
 test_data:
-  root: '/root/robot/data/data/task1/lerobot'  # 数据根目录
-  repo_id: 'task_400_episodes'  # 数据集ID
-  episodes_range: [0, 50]       # 测试episodes范围 [start, end]
-  batch_size: 1                 # 批处理大小（离线评估通常为1）
-  num_workers: 4                # 数据加载进程数
-  max_episodes: 5              # 最大测试episodes数
-  max_steps_per_episode: 50    # 每个episode最大步数
+  root: '/mnt/e/robot/data/data/task1/lerobot/1-400' # 数据根目录
+  repo_id: 'task_400_episodes' # 数据集ID
+  episodes_range: [0, 50] # 测试episodes范围 [start, end]
+  batch_size: 1 # 批处理大小（离线评估通常为1）
+  num_workers: 4 # 数据加载进程数
+  max_episodes: 5 # 最大测试episodes数
+  max_steps_per_episode: 50 # 每个episode最大步数
 
 # 模型配置
 model:
-  type: 'humanoid_diffusion'  # 模型类型标识
+  type: 'humanoid_diffusion' # 模型类型标识
   # 完整的检查点路径（用户需要根据实际情况修改）
-  checkpoint_path: 'outputs/train/task_400_episodes/humanoid_hierarchical/run_20240101_120000/epoch1'
+  checkpoint_path: 'outputs/train/task_400_episodes/humanoid_hierarchical/task_specific_run_20250930_030432/curriculum_basic_manipulation_epoch40'
 
 # 分层架构特有评估配置
 hierarchical_evaluation:
   # 启用的层配置
-  enabled_layers: ['safety', 'manipulation']  # 测试时启用的层
+  enabled_layers: ['safety', 'manipulation'] # 测试时启用的层
 
   # 性能预算配置
-  latency_budget_ms: 100.0    # 推理延迟预算（毫秒）
-  enable_adaptive_inference: True  # 启用自适应推理
+  latency_budget_ms: 100.0 # 推理延迟预算（毫秒）
+  enable_adaptive_inference: True # 启用自适应推理
 
   # 层激活分析
   layer_activation_analysis:
     enable: True
     expected_rates:
-      safety: 0.95             # 安全层预期激活率
-      gait: 0.0                # 步态层（仅手臂任务，预期为0）
-      manipulation: 0.8        # 操作层预期激活率
-      planning: 0.0            # 规划层（测试时禁用）
+      safety: 0.95 # 安全层预期激活率
+      gait: 0.0 # 步态层（仅手臂任务，预期为0）
+      manipulation: 0.8 # 操作层预期激活率
+      planning: 0.0 # 规划层（测试时禁用）
 
   # 层一致性检查
   layer_consistency_check:
     enable: True
-    safety_override_threshold: 0.05    # 安全层覆盖频率阈值
-    layer_conflict_threshold: 0.1      # 层冲突率阈值
-    temporal_consistency_window: 5     # 时序一致性检查窗口
+    safety_override_threshold: 0.05 # 安全层覆盖频率阈值
+    layer_conflict_threshold: 0.1 # 层冲突率阈值
+    temporal_consistency_window: 5 # 时序一致性检查窗口
 
   # 推理延迟分析
   latency_analysis:
     enable: True
-    budget_compliance_threshold: 0.9   # 预算遵从率阈值（90%）
-    average_latency_threshold: 50      # 平均延迟阈值（毫秒）
-    per_layer_timing: True             # 记录每层的执行时间
+    budget_compliance_threshold: 0.9 # 预算遵从率阈值（90%）
+    average_latency_threshold: 50 # 平均延迟阈值（毫秒）
+    per_layer_timing: True # 记录每层的执行时间
 
   # 层权重分析
   layer_weight_analysis:
     enable: True
-    analyze_weight_distribution: True   # 分析权重分布
-    track_weight_changes: True          # 跟踪权重变化
+    analyze_weight_distribution: True # 分析权重分布
+    track_weight_changes: True # 跟踪权重变化
 
   # 任务特化分析
   task_specialization_analysis:
     enable: True
-    analyze_module_activation: True     # 分析任务特化模块激活
-    track_specialization_effectiveness: True  # 跟踪特化效果
+    analyze_module_activation: True # 分析任务特化模块激活
+    track_specialization_effectiveness: True # 跟踪特化效果
 
 # 分层架构特有的评估指标
 hierarchical_metrics:
   # 层激活指标
   layer_activation_metrics:
-    - 'activation_rate'         # 激活率
-    - 'activation_consistency'  # 激活一致性
-    - 'layer_switching_frequency'  # 层切换频率
+    - 'activation_rate' # 激活率
+    - 'activation_consistency' # 激活一致性
+    - 'layer_switching_frequency' # 层切换频率
 
   # 延迟指标
   latency_metrics:
-    - 'average_inference_time'  # 平均推理时间
-    - 'budget_violation_rate'   # 预算违规率
-    - 'per_layer_timing'        # 每层执行时间
-    - 'adaptive_speedup_ratio'  # 自适应加速比
+    - 'average_inference_time' # 平均推理时间
+    - 'budget_violation_rate' # 预算违规率
+    - 'per_layer_timing' # 每层执行时间
+    - 'adaptive_speedup_ratio' # 自适应加速比
 
   # 层协调指标
   coordination_metrics:
-    - 'layer_conflict_rate'     # 层冲突率
-    - 'safety_override_rate'    # 安全覆盖率
+    - 'layer_conflict_rate' # 层冲突率
+    - 'safety_override_rate' # 安全覆盖率
     - 'hierarchical_consistency' # 分层一致性
 
 # 分层架构可视化配置
 hierarchical_visualization:
-  plot_layer_activation: True         # 绘制层激活图
-  plot_latency_distribution: True     # 绘制延迟分布图
-  plot_layer_weight_evolution: True   # 绘制层权重演化图
-  plot_coordination_matrix: True      # 绘制层协调矩阵
-  animation_layer_dynamics: False     # 生成层动态变化动画（计算量大）
+  plot_layer_activation: True # 绘制层激活图
+  plot_latency_distribution: True # 绘制延迟分布图
+  plot_layer_weight_evolution: True # 绘制层权重演化图
+  plot_coordination_matrix: True # 绘制层协调矩阵
+  animation_layer_dynamics: False # 生成层动态变化动画（计算量大）
 
 # 快速验证模式（1-epoch模型专用）
 quick_validation:
-  enable: False               # 是否启用快速验证模式
-  reduced_episodes: 3         # 减少的测试episodes
-  reduced_steps: 20           # 减少的每episode步数
-  essential_metrics_only: True  # 只计算核心指标
-  skip_visualization: True    # 跳过可视化生成
+  enable: False # 是否启用快速验证模式
+  reduced_episodes: 3 # 减少的测试episodes
+  reduced_steps: 20 # 减少的每episode步数
+  essential_metrics_only: True # 只计算核心指标
+  skip_visualization: True # 跳过可视化生成
 
 # 故障诊断配置
 debugging:
-  enable_layer_debugging: True      # 启用层级调试
-  save_layer_outputs: True          # 保存层输出
-  track_gradient_flow: False        # 跟踪梯度流（仅用于调试）
-  verbose_layer_info: True          # 详细层信息输出
+  enable_layer_debugging: True # 启用层级调试
+  save_layer_outputs: True # 保存层输出
+  track_gradient_flow: False # 跟踪梯度流（仅用于调试）
+  verbose_layer_info: True # 详细层信息输出
