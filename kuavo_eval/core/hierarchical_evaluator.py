@@ -98,6 +98,11 @@ class HierarchicalEvaluator(BaseEvaluator):
                     outputs = self.model.scheduler(observation, task_info)
                     inference_time = (time.time() - start_time) * 1000  # 转换为毫秒
 
+                    # 调试信息：打印输出结构
+                    self.logger.debug(f"Scheduler outputs keys: {list(outputs.keys()) if isinstance(outputs, dict) else 'Not a dict'}")
+                    for layer_name, layer_output in outputs.items() if isinstance(outputs, dict) else []:
+                        self.logger.debug(f"Layer {layer_name} output keys: {list(layer_output.keys()) if isinstance(layer_output, dict) else 'Not a dict'}")
+
                     # 提取最终动作
                     if 'final_action' in outputs:
                         action = outputs['final_action']
@@ -106,8 +111,10 @@ class HierarchicalEvaluator(BaseEvaluator):
                         for layer_name in ['safety', 'gait', 'manipulation', 'planning']:
                             if layer_name in outputs and 'action' in outputs[layer_name]:
                                 action = outputs[layer_name]['action']
+                                self.logger.debug(f"Using action from layer: {layer_name}")
                                 break
                         else:
+                            self.logger.error(f"No valid action found. Available outputs: {outputs}")
                             raise RuntimeError("No valid action output from hierarchical layers")
 
                     # 提取分层信息
