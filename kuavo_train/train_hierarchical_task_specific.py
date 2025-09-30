@@ -286,6 +286,13 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
     stage_epochs = stage_config.get("epochs", 10)
     target_task = stage_config.get("target_task")
 
+    # 测试训练模式：强制每个阶段只跑1个epoch
+    test_training_mode = cfg.training.get('test_training_mode', False)
+    if test_training_mode:
+        original_epochs = stage_epochs
+        stage_epochs = 1
+        print(f"🧪 TEST MODE: Overriding {stage_name} stage epochs from {original_epochs} to 1")
+
     print(f"🎓 开始任务特定课程阶段: {stage_name}")
     print(f"   激活层: {enabled_layers}")
     print(f"   目标任务: {target_task}")
@@ -449,6 +456,16 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
         stage_steps if stage_steps > 0 else float('inf')
     print(f"✅ 课程阶段 {stage_name} 完成，平均损失: {avg_stage_loss:.4f}")
 
+    # 测试训练模式：在每个阶段结束后自动保存模型
+    if test_training_mode and output_directory is not None:
+        test_save_path = output_directory / f"test_task_stage_{stage_name}_complete"
+        print(f"🧪 TEST MODE: Auto-saving task stage completion to {test_save_path}")
+        try:
+            policy.save_pretrained(test_save_path)
+            print(f"✅ Test task stage model saved successfully: {test_save_path}")
+        except Exception as e:
+            print(f"❌ Test task stage model save failed: {e}")
+
     return current_step + stage_steps
 
 
@@ -513,6 +530,9 @@ def main(cfg: DictConfig):
     logger = setup_logging()
     set_seed(cfg.training.seed)
 
+    # 检查测试训练模式
+    test_training_mode = cfg.training.get('test_training_mode', False)
+
     print("🎯 任务特定分层人形机器人Diffusion Policy训练")
     print("=" * 70)
     print(f"任务: {cfg.task}")
@@ -520,6 +540,11 @@ def main(cfg: DictConfig):
     print(f"使用分层架构: {cfg.policy.get('use_hierarchical', False)}")
     print(
         f"任务特定训练: {cfg.get('task_specific_training', {}).get('enable', False)}")
+
+    if test_training_mode:
+        print("🧪 TEST TRAINING MODE ENABLED - Running 1 epoch per curriculum stage")
+        print("⚡ All curriculum stages will be reduced to 1 epoch for quick validation")
+        print("💾 Automatic saving enabled after each stage")
 
     # 验证配置
     if not cfg.policy.get('use_hierarchical', False):
