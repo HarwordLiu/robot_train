@@ -50,11 +50,20 @@ class HierarchicalFeatureFusion(nn.Module):
         super().__init__()
         self.config = config
 
-        # 特征融合网络
-        self.safety_fusion = nn.Linear(64, 32)   # 安全层特征融合
-        self.gait_fusion = nn.Linear(32, 64)     # 步态层特征融合 (修正维度)
-        self.manipulation_fusion = nn.Linear(512, 128)  # 操作层特征融合
-        self.planning_fusion = nn.Linear(1024, 256)     # 规划层特征融合
+        # 获取动态的动作维度
+        # 根据实际机器人配置：only_arm=true时，状态为双臂14维+手爪2维=16维
+        state_shape = getattr(config, 'robot_state_feature', None)
+        if state_shape and hasattr(state_shape, 'shape'):
+            action_dim = state_shape.shape[0]
+        else:
+            action_dim = 16  # 默认：双臂+手爪配置
+
+        # 特征融合网络 - 使用动态维度
+        # 所有层现在都输出action_dim维的动作，融合到更高维的特征空间
+        self.safety_fusion = nn.Linear(action_dim, 32)      # 安全层特征融合: 16->32
+        self.gait_fusion = nn.Linear(action_dim, 64)        # 步态层特征融合: 16->64
+        self.manipulation_fusion = nn.Linear(action_dim, 128)  # 操作层特征融合: 16->128
+        self.planning_fusion = nn.Linear(action_dim, 256)      # 规划层特征融合: 16->256
 
     def forward(self, batch: Dict[str, torch.Tensor], layer_outputs: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         """
