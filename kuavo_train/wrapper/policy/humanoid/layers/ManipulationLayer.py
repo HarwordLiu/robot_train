@@ -105,6 +105,9 @@ class ManipulationLayer(BaseLayer):
         # 状态特征
         if 'observation.state' in inputs:
             state_features = inputs['observation.state']
+            # 处理维度：确保是3D tensor [batch_size, seq_len, state_dim]
+            if len(state_features.shape) == 2:
+                state_features = state_features.unsqueeze(1)  # [batch_size, 1, state_dim]
             features_list.append(state_features)
 
         # 视觉特征（如果可用）
@@ -113,7 +116,18 @@ class ManipulationLayer(BaseLayer):
             visual_features = inputs['observation.images']
             if len(visual_features.shape) > 3:
                 visual_features = visual_features.mean(dim=(-2, -1))  # 全局平均池化
+            # 确保是3D tensor
+            if len(visual_features.shape) == 2:
+                visual_features = visual_features.unsqueeze(1)
             features_list.append(visual_features)
+        else:
+            # 如果没有视觉特征，需要用零填充以匹配预训练模型的输入维度
+            if features_list:
+                batch_size, seq_len = features_list[0].shape[:2]
+                device = features_list[0].device
+                # 创建1280维的零视觉特征
+                zero_visual = torch.zeros(batch_size, seq_len, self.expected_visual_dim, device=device)
+                features_list.append(zero_visual)
 
         if not features_list:
             return None

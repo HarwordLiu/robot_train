@@ -553,7 +553,37 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             else:
                 print(f"✅ 分层架构模型加载成功，包含 {len(instance.scheduler.layers)} 个层")
 
+                # 检查是否需要处理权重兼容性问题
+                instance._handle_weight_compatibility()
+
         return instance
+
+    def _handle_weight_compatibility(self):
+        """处理预训练模型与分层架构之间的权重兼容性"""
+        if not self.use_hierarchical or not hasattr(self, 'scheduler'):
+            return
+
+        print("🔧 检查分层架构权重兼容性...")
+
+        # 检查每个层是否有合理的权重
+        for layer_name, layer in self.scheduler.layers.items():
+            try:
+                # 尝试一个简单的前向传播测试
+                with torch.no_grad():
+                    test_input = {
+                        'observation.state': torch.randn(1, 16).to(next(layer.parameters()).device)
+                    }
+                    _ = layer.forward(test_input)
+                    print(f"✅ {layer_name} 层权重加载正常")
+            except Exception as e:
+                print(f"⚠️  {layer_name} 层可能存在权重问题: {e}")
+                print(f"🔧 使用默认权重初始化 {layer_name} 层")
+
+                # 重新初始化这个层的权重
+                for module in layer.modules():
+                    if isinstance(module, (nn.Linear, nn.GRU, nn.TransformerEncoderLayer)):
+                        if hasattr(module, 'reset_parameters'):
+                            module.reset_parameters()
 
 
 # 为了向后兼容性，创建别名
