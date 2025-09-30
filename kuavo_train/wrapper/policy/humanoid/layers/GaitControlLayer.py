@@ -80,7 +80,16 @@ class GaitControlLayer(BaseLayer):
             device = list(inputs.values())[0].device
             return self._generate_default_output(batch_size, device)
 
-        batch_size, seq_len, state_dim = robot_state.shape
+        # 处理不同维度的输入
+        if len(robot_state.shape) == 2:
+            # [batch_size, state_dim] -> [batch_size, 1, state_dim]
+            robot_state = robot_state.unsqueeze(1)
+            batch_size, seq_len, state_dim = robot_state.shape
+        elif len(robot_state.shape) == 3:
+            # [batch_size, seq_len, state_dim]
+            batch_size, seq_len, state_dim = robot_state.shape
+        else:
+            raise ValueError(f"Unexpected robot_state shape: {robot_state.shape}, expected 2D or 3D tensor")
 
         # 维度适配
         if state_dim != self.input_dim:
