@@ -541,31 +541,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             if hierarchical_config:
                 kwargs['hierarchical'] = hierarchical_config
 
-        # 如果需要分层架构，使用自定义加载逻辑处理权重不匹配
-        if use_hierarchical:
-            # 先创建实例但不加载权重
-            config_arg = None
-            if len(args) > 1:
-                config_arg = args[1]
-            elif 'config' in kwargs:
-                config_arg = kwargs.get('config')
-
-            if config_arg is None:
-                from kuavo_train.wrapper.policy.diffusion.DiffusionConfigWrapper import CustomDiffusionConfigWrapper
-                config_arg = CustomDiffusionConfigWrapper.from_pretrained(args[0])
-
-            # 创建实例
-            instance = cls(config_arg, use_hierarchical=True, hierarchical=hierarchical_config, **{k: v for k, v in kwargs.items() if k not in ['config', 'use_hierarchical', 'hierarchical']})
-
-            # 自定义权重加载
-            instance._load_weights_with_flexibility(args[0], kwargs.get('strict', False))
-
-            # 设置设备和模式
-            instance.to(config_arg.device)
-            instance.eval()
-        else:
-            # 调用父类方法进行基础加载
-            instance = super().from_pretrained(*args, **kwargs)
+        # 调用父类方法进行基础加载
+        instance = super().from_pretrained(*args, **kwargs)
 
         # 验证分层架构是否正确加载
         if use_hierarchical:
@@ -576,124 +553,9 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             else:
                 print(f"✅ 分层架构模型加载成功，包含 {len(instance.scheduler.layers)} 个层")
 
-                # 检查是否需要处理权重兼容性问题
-                instance._handle_weight_compatibility()
 
         return instance
 
-    def _handle_weight_compatibility(self):
-        """处理预训练模型与分层架构之间的权重兼容性"""
-        if not self.use_hierarchical or not hasattr(self, 'scheduler'):
-            return
-
-        print("🔧 检查分层架构权重兼容性...")
-
-        # 检查每个层是否有合理的权重
-        for layer_name, layer in self.scheduler.layers.items():
-            try:
-                # 尝试一个简单的前向传播测试
-                with torch.no_grad():
-                    test_input = {
-                        'observation.state': torch.randn(1, 16).to(next(layer.parameters()).device)
-                    }
-                    _ = layer.forward(test_input)
-                    print(f"✅ {layer_name} 层权重加载正常")
-            except Exception as e:
-                print(f"⚠️  {layer_name} 层可能存在权重问题: {e}")
-                print(f"🔧 使用默认权重初始化 {layer_name} 层")
-
-                # 重新初始化这个层的权重
-                for module in layer.modules():
-                    if isinstance(module, (nn.Linear, nn.GRU, nn.TransformerEncoderLayer)):
-                        if hasattr(module, 'reset_parameters'):
-                            module.reset_parameters()
-
-    def _load_weights_with_flexibility(self, pretrained_path: str, strict: bool = False):
-        """灵活加载权重，处理维度不匹配问题"""
-        import os
-        from pathlib import Path
-        from huggingface_hub.constants import SAFETENSORS_SINGLE_FILE
-        from safetensors.torch import load_file
-
-        print("🔧 使用灵活权重加载逻辑...")
-
-        # 确定模型文件路径
-        if os.path.isdir(pretrained_path):
-            model_file = os.path.join(pretrained_path, SAFETENSORS_SINGLE_FILE)
-        else:
-            model_file = pretrained_path
-
-        if not os.path.exists(model_file):
-            raise FileNotFoundError(f"Model file not found: {model_file}")
-
-        # 加载state_dict
-        checkpoint_state_dict = load_file(model_file)
-        model_state_dict = self.state_dict()
-
-        # 分类权重
-        compatible_weights = {}
-        incompatible_keys = []
-        missing_keys = []
-
-        print("🔍 分析权重兼容性...")
-
-        for key, checkpoint_param in checkpoint_state_dict.items():
-            if key in model_state_dict:
-                model_param = model_state_dict[key]
-                if checkpoint_param.shape == model_param.shape:
-                    compatible_weights[key] = checkpoint_param
-                    print(f"✅ {key}: {checkpoint_param.shape}")
-                else:
-                    incompatible_keys.append(key)
-                    print(f"❌ {key}: checkpoint {checkpoint_param.shape} vs model {model_param.shape}")
-            else:
-                print(f"⚠️  Missing in model: {key}")
-
-        # 检查模型中缺失的权重
-        for key in model_state_dict:
-            if key not in checkpoint_state_dict:
-                missing_keys.append(key)
-                print(f"🆕 New in model: {key}")
-
-        # 加载兼容的权重
-        print(f"\n🔄 加载 {len(compatible_weights)} 个兼容权重...")
-        missing, unexpected = self.load_state_dict(compatible_weights, strict=False)
-
-        # 重新初始化不兼容的层
-        if incompatible_keys:
-            print(f"\n🔧 重新初始化 {len(incompatible_keys)} 个不兼容权重的层...")
-            self._reinitialize_incompatible_layers(incompatible_keys)
-
-        print(f"\n✅ 权重加载完成:")
-        print(f"  - 兼容权重: {len(compatible_weights)}")
-        print(f"  - 不兼容权重: {len(incompatible_keys)}")
-        print(f"  - 新增权重: {len(missing_keys)}")
-
-    def _reinitialize_incompatible_layers(self, incompatible_keys: list):
-        """重新初始化不兼容的层"""
-        # 提取需要重新初始化的模块名
-        modules_to_reinit = set()
-        for key in incompatible_keys:
-            # 例如: "scheduler.layers.gait.output_projection.weight" -> "scheduler.layers.gait.output_projection"
-            module_path = '.'.join(key.split('.')[:-1])
-            modules_to_reinit.add(module_path)
-
-        for module_path in modules_to_reinit:
-            try:
-                # 通过路径获取模块
-                module = self
-                for attr in module_path.split('.'):
-                    module = getattr(module, attr)
-
-                # 重新初始化
-                if hasattr(module, 'reset_parameters'):
-                    module.reset_parameters()
-                    print(f"🔧 重新初始化: {module_path}")
-                else:
-                    print(f"⚠️  无法重新初始化: {module_path} (没有reset_parameters方法)")
-
-            except AttributeError as e:
-                print(f"❌ 无法访问模块: {module_path} - {e}")
 
 
 # 为了向后兼容性，创建别名

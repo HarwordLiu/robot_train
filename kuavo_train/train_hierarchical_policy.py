@@ -149,6 +149,12 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
     enabled_layers = stage_config.get("layers", [])
     stage_epochs = stage_config.get("epochs", 10)
 
+    # 测试训练模式：强制每个阶段只跑1个epoch
+    test_training_mode = cfg.training.get('test_training_mode', False)
+    if test_training_mode:
+        stage_epochs = 1
+        print(f"🧪 TEST MODE: Overriding {stage_name} stage epochs from {stage_config.get('epochs', 10)} to 1")
+
     print("🎓 Starting curriculum stage: {} (layers: {}, epochs: {})".format(
         stage_name, enabled_layers, stage_epochs))
     print(f"🔧 课程学习阶段参数:")
@@ -266,6 +272,16 @@ def run_curriculum_learning_stage(policy, stage_config, dataset, cfg, device, wr
 
         print(f"✅ Epoch {epoch+1} 检查点保存完成")
 
+    # 测试训练模式：在每个阶段结束后自动保存模型
+    if test_training_mode and output_directory is not None:
+        test_save_path = output_directory / f"test_stage_{stage_name}_complete"
+        print(f"🧪 TEST MODE: Auto-saving stage completion to {test_save_path}")
+        try:
+            policy.save_pretrained(test_save_path)
+            print(f"✅ Test stage model saved successfully: {test_save_path}")
+        except Exception as e:
+            print(f"❌ Test stage model save failed: {e}")
+
     print("✅ Completed curriculum stage: {} (best loss: {:.4f})".format(
         stage_name, best_stage_loss))
     return current_step + stage_steps
@@ -322,11 +338,19 @@ def main(cfg: DictConfig):
     """分层架构训练主函数"""
     set_seed(cfg.training.seed)
 
+    # 检查测试训练模式
+    test_training_mode = cfg.training.get('test_training_mode', False)
+
     print("🤖 Hierarchical Humanoid Diffusion Policy Training")
     print("=" * 60)
     print("Config: {}".format(cfg.defaults))
     print("Use hierarchical: {}".format(
         cfg.policy.get('use_hierarchical', False)))
+
+    if test_training_mode:
+        print("🧪 TEST TRAINING MODE ENABLED - Running 1 epoch per stage for quick validation")
+        print("⚡ All curriculum stages will be reduced to 1 epoch")
+        print("💾 Automatic saving enabled after each stage")
 
     # 验证分层架构配置
     if not cfg.policy.get('use_hierarchical', False):
