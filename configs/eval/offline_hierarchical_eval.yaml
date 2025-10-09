@@ -19,7 +19,7 @@ test_data:
 model:
   type: 'humanoid_diffusion' # 模型类型标识
   # 完整的检查点路径（用户需要根据实际情况修改）
-  checkpoint_path: 'outputs/train/task_400_episodes/humanoid_hierarchical/task_specific_run_20250930_030432/curriculum_basic_manipulation_epoch40'
+  checkpoint_path: 'outputs/train/task_400_episodes/humanoid_hierarchical/task_specific_run_20250930_112107/test_task_stage_full_grasping_complete/'
   use_hierarchical: true # 启用分层架构
 
 # 分层架构核心配置（用于构建模型）
@@ -42,24 +42,24 @@ hierarchical:
       input_dim: 16
 
     gait:
-      enabled: false  # 仅手臂任务，禁用步态层
+      enabled: false # 仅手臂任务，禁用步态层
       hidden_size: 128
       output_dim: 16
       input_dim: 16
 
     manipulation:
       enabled: true
-      hidden_size: 512  # 保持训练时配置
+      hidden_size: 512 # 保持训练时配置
       layers: 3
       heads: 8
       dim_feedforward: 2048
 
     planning:
-      enabled: false  # 测试时禁用规划层
-      hidden_size: 1024  # 与训练时保持一致
-      layers: 4  # 与训练时保持一致（有layers.0,1,2,3）
+      enabled: false # 测试时禁用规划层
+      hidden_size: 1024 # 与训练时保持一致
+      layers: 4 # 与训练时保持一致（有layers.0,1,2,3）
       heads: 4
-      dim_feedforward: 4096  # 通常是hidden_size的4倍
+      dim_feedforward: 4096 # 通常是hidden_size的4倍
 
 # 分层架构特有评估配置
 hierarchical_evaluation:
