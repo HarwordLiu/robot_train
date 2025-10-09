@@ -144,12 +144,12 @@ class TaskSpecificTrainingManager:
                                 "epochs": universal_stages.get("stage2", {}).get("epochs", 1)
                             },
                             "stage3": {
-                                "name": "full_grasping",
+                                "name": "manipulation_skills",
                                 "layers": ["safety", "gait", "manipulation"],
                                 "epochs": universal_stages.get("stage3", {}).get("epochs", 1)
                             },
                             "stage4": {
-                                "name": "full_grasping",
+                                "name": "integrated_planning",
                                 "layers": ["safety", "gait", "manipulation", "planning"],
                                 "epochs": universal_stages.get("stage4", {}).get("epochs", 1)
                             }

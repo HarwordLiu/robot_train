@@ -337,7 +337,10 @@ def run_task_specific_curriculum_stage(policy, stage_config: Dict[str, Any], dat
     for epoch in range(start_epoch, stage_epochs):
         print(f"🚀 开始 Epoch {epoch+1}/{stage_epochs}")
         epoch_bar = tqdm(
-            dataloader, desc=f"课程阶段 {stage_name} Epoch {epoch+1}/{stage_epochs}")
+            dataloader,
+            desc=f"课程阶段 {stage_name} Epoch {epoch+1}/{stage_epochs}",
+            dynamic_ncols=True,
+            leave=False)
         epoch_loss = 0.0
 
         for batch in epoch_bar:
@@ -772,7 +775,10 @@ def main(cfg: DictConfig):
             datasets, task_manager, cfg, device)
 
         epoch_bar = tqdm(
-            dataloader, desc=f"Epoch {epoch+1}/{cfg.training.max_epoch}")
+            dataloader,
+            desc=f"Epoch {epoch+1}/{cfg.training.max_epoch}",
+            dynamic_ncols=True,
+            leave=False)
 
         total_loss = 0.0
         for batch in epoch_bar:

@@ -51,7 +51,8 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             super().__init__(config, dataset_stats)
 
             # 如果提供了外部hierarchical配置，使用它；否则从config中获取
-            hierarchical_config = hierarchical if hierarchical is not None else getattr(config, 'hierarchical', {})
+            hierarchical_config = hierarchical if hierarchical is not None else getattr(
+                config, 'hierarchical', {})
             self._init_hierarchical_components(config, hierarchical_config)
 
             # 初始化任务条件权重系统
@@ -222,7 +223,6 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         """更新任务特定的层权重"""
         if task_weights:
             self.task_layer_weights.update(task_weights)
-            print(f"🎯 更新任务权重: {task_weights}")
 
     def _update_curriculum_state(self, curriculum_info: Dict[str, Any]):
         """更新课程学习状态"""
@@ -553,9 +553,7 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             else:
                 print(f"✅ 分层架构模型加载成功，包含 {len(instance.scheduler.layers)} 个层")
 
-
         return instance
-
 
 
 # 为了向后兼容性，创建别名

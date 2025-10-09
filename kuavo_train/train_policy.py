@@ -304,7 +304,11 @@ def main(cfg: DictConfig):
             prefetch_factor=1,
         )
 
-        epoch_bar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{cfg.training.max_epoch}")
+        epoch_bar = tqdm(
+            dataloader,
+            desc=f"Epoch {epoch+1}/{cfg.training.max_epoch}",
+            dynamic_ncols=True,
+            leave=False)
 
         total_loss = 0.0
         for batch in epoch_bar:
