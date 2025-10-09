@@ -173,22 +173,22 @@ policy:
         stage1:
           name: 'safety_only'
           layers: ['safety']
-          epochs: 30
+          epochs: 5
           loss_threshold: 0.1
         stage2:
           name: 'safety_gait'
           layers: ['safety', 'gait']
-          epochs: 70
+          epochs: 5
           loss_threshold: 0.08
         stage3:
           name: 'safety_gait_manipulation'
           layers: ['safety', 'gait', 'manipulation']
-          epochs: 100
+          epochs: 5
           loss_threshold: 0.06
         stage4:
           name: 'full_hierarchy'
           layers: ['safety', 'gait', 'manipulation', 'planning']
-          epochs: 100
+          epochs: 5
           loss_threshold: 0.05
 
       # 任务特定训练模式
@@ -251,7 +251,7 @@ task_specific_training:
     # 渐进式学习：逐步添加新任务
     progressive_learning: True
     # 每阶段最小训练epochs
-    min_epochs_per_phase: 100
+    min_epochs_per_phase: 10
     # 任务切换损失阈值
     phase_transition_loss_threshold: 0.08
 
