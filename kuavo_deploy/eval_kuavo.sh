@@ -2,6 +2,15 @@
 # Kuavo机器人控制示例脚本
 # 展示如何使用命令行参数控制不同的任务
 
+# 加载 ROS Docker 环境变量
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_ROOT/.ros_docker_desktop_env" ]; then
+    source "$SCRIPT_ROOT/.ros_docker_desktop_env"
+    echo "✅ 已加载 ROS 环境配置"
+    echo "   ROS_MASTER_URI=$ROS_MASTER_URI"
+    echo "   ROS_IP=$ROS_IP"
+fi
+
 cleanup() {
     echo "⏹️ 捕获到 Ctrl+C，开始终止任务"
     if [ -n "$current_pid" ] && kill -0 "$current_pid" 2>/dev/null; then
