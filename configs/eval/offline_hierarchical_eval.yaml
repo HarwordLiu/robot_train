@@ -42,7 +42,7 @@ hierarchical:
       input_dim: 16
 
     gait:
-      enabled: false # 仅手臂任务，禁用步态层
+      enabled: true # 启用步态层进行完整测试
       hidden_size: 128
       output_dim: 16
       input_dim: 16
@@ -55,7 +55,7 @@ hierarchical:
       dim_feedforward: 2048
 
     planning:
-      enabled: false # 测试时禁用规划层
+      enabled: true # 启用规划层进行完整测试
       hidden_size: 1024 # 与训练时保持一致
       layers: 4 # 与训练时保持一致（有layers.0,1,2,3）
       heads: 4
@@ -64,7 +64,7 @@ hierarchical:
 # 分层架构特有评估配置
 hierarchical_evaluation:
   # 启用的层配置
-  enabled_layers: ['safety', 'manipulation'] # 测试时启用的层
+  enabled_layers: ['safety', 'gait', 'manipulation', 'planning'] # 启用所有层进行完整测试
 
   # 性能预算配置
   latency_budget_ms: 500.0 # 推理延迟预算（毫秒）- 增加以允许离线评估
@@ -75,9 +75,9 @@ hierarchical_evaluation:
     enable: True
     expected_rates:
       safety: 0.95 # 安全层预期激活率
-      gait: 0.0 # 步态层（仅手臂任务，预期为0）
+      gait: 0.3 # 步态层预期激活率（部分任务需要移动）
       manipulation: 0.8 # 操作层预期激活率
-      planning: 0.0 # 规划层（测试时禁用）
+      planning: 0.2 # 规划层预期激活率（复杂任务需要规划）
 
   # 层一致性检查
   layer_consistency_check:
@@ -144,7 +144,7 @@ quick_validation:
 
 # 故障诊断配置
 debugging:
-  enable_layer_debugging: True # 启用层级调试
-  save_layer_outputs: True # 保存层输出
+  enable_layer_debugging: False # 禁用层级调试以减少输出
+  save_layer_outputs: False # 不保存层输出以减少存储
   track_gradient_flow: False # 跟踪梯度流（仅用于调试）
-  verbose_layer_info: True # 详细层信息输出
+  verbose_layer_info: False # 减少详细层信息输出

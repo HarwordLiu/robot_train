@@ -5,21 +5,19 @@
 专门用于评估HumanoidDiffusionPolicy分层架构模型
 """
 
+from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
+from .base_evaluator import BaseEvaluator, EvaluationResults
+from collections import defaultdict, Counter
+from typing import Dict, List, Tuple, Any, Optional
+import time
+import numpy as np
+import torch
+import lerobot_patches.custom_patches
 import sys
 import os
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-import lerobot_patches.custom_patches
-
-import torch
-import numpy as np
-import time
-from typing import Dict, List, Tuple, Any, Optional
-from collections import defaultdict, Counter
-
-from .base_evaluator import BaseEvaluator, EvaluationResults
-from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
 
 class HierarchicalEvaluator(BaseEvaluator):
     """
@@ -43,11 +41,13 @@ class HierarchicalEvaluator(BaseEvaluator):
         self.budget_violation_count = 0
         self.total_inference_steps = 0
 
-        self.logger.info("Initialized HierarchicalEvaluator for humanoid_diffusion model")
+        self.logger.info(
+            "Initialized HierarchicalEvaluator for humanoid_diffusion model")
 
     def load_model(self) -> None:
         """加载分层架构模型"""
-        self.logger.info(f"Loading hierarchical model from {self.config.model.checkpoint_path}")
+        self.logger.info(
+            f"Loading hierarchical model from {self.config.model.checkpoint_path}")
 
         try:
             # 传递分层架构配置信息
@@ -92,8 +92,8 @@ class HierarchicalEvaluator(BaseEvaluator):
 
         # 构建任务信息（根据配置）
         task_info = {
-            'task_complexity': 'medium',
-            'requires_locomotion': False,  # 仅手臂任务
+            'task_complexity': 'high',  # 提高任务复杂度以激活规划层
+            'requires_locomotion': True,  # 启用移动需求
             'requires_manipulation': True,
             'safety_priority': True,
             'enabled_layers': self.config.hierarchical_evaluation.enabled_layers
@@ -109,30 +109,35 @@ class HierarchicalEvaluator(BaseEvaluator):
                     outputs = self.model.scheduler(observation, task_info)
                     inference_time = (time.time() - start_time) * 1000  # 转换为毫秒
 
-                    print(f"🔥 DEBUG: Scheduler outputs: {list(outputs.keys())}")
-                    for layer_name, layer_output in outputs.items():
-                        if isinstance(layer_output, dict):
-                            print(f"🔥 DEBUG: Layer {layer_name} output keys: {list(layer_output.keys())}")
-                        else:
-                            print(f"🔥 DEBUG: Layer {layer_name} output type: {type(layer_output)}")
+                    # 只在调试模式下输出详细信息
+                    if self.config.debugging.get('verbose_layer_info', False):
+                        self.logger.debug(
+                            f"Scheduler outputs: {list(outputs.keys())}")
+                        for layer_name, layer_output in outputs.items():
+                            if isinstance(layer_output, dict):
+                                self.logger.debug(
+                                    f"Layer {layer_name} output keys: {list(layer_output.keys())}")
 
                     # 提取最终动作
                     if 'final_action' in outputs:
                         action = outputs['final_action']
-                        print(f"🔥 DEBUG: Using final_action")
                     else:
                         # 使用最高优先级层的输出
                         found_action = False
                         for layer_name in ['safety', 'gait', 'manipulation', 'planning']:
                             if layer_name in outputs and isinstance(outputs[layer_name], dict) and 'action' in outputs[layer_name]:
                                 action = outputs[layer_name]['action']
-                                print(f"🔥 DEBUG: Using action from layer: {layer_name}")
+                                if self.config.debugging.get('verbose_layer_info', False):
+                                    self.logger.debug(
+                                        f"Using action from layer: {layer_name}")
                                 found_action = True
                                 break
 
                         if not found_action:
-                            print(f"🔥 DEBUG: No valid action found in outputs: {outputs}")
-                            raise RuntimeError("No valid action output from hierarchical layers")
+                            self.logger.error(
+                                f"No valid action found in outputs: {outputs}")
+                            raise RuntimeError(
+                                "No valid action output from hierarchical layers")
 
                     # 提取分层信息
                     inference_info.update({
@@ -189,7 +194,8 @@ class HierarchicalEvaluator(BaseEvaluator):
         if isinstance(hierarchical_outputs, dict):
             for layer_name, layer_output in hierarchical_outputs.items():
                 if isinstance(layer_output, dict) and 'execution_time' in layer_output:
-                    self.layer_timing_stats[layer_name].append(layer_output['execution_time'])
+                    self.layer_timing_stats[layer_name].append(
+                        layer_output['execution_time'])
 
     def _calculate_hierarchical_metrics(self) -> Dict[str, float]:
         """计算分层架构特有指标"""
@@ -204,7 +210,8 @@ class HierarchicalEvaluator(BaseEvaluator):
             metrics[f'{layer}_activation_rate'] = activation_rate
 
         # 预算遵从率
-        budget_compliance_rate = 1.0 - (self.budget_violation_count / self.total_inference_steps)
+        budget_compliance_rate = 1.0 - \
+            (self.budget_violation_count / self.total_inference_steps)
         metrics['budget_compliance_rate'] = budget_compliance_rate
 
         # 平均层执行时间
@@ -216,7 +223,8 @@ class HierarchicalEvaluator(BaseEvaluator):
         # 安全覆盖率
         safety_activation = self.layer_activation_stats.get('safety', 0)
         if safety_activation > 0:
-            metrics['safety_override_rate'] = self.safety_override_count / safety_activation
+            metrics['safety_override_rate'] = self.safety_override_count / \
+                safety_activation
 
         return metrics
 
@@ -235,13 +243,15 @@ class HierarchicalEvaluator(BaseEvaluator):
             active_layers = inference_info.get('active_layers', [])
 
             for layer in ['safety', 'gait', 'manipulation', 'planning']:
-                layer_sequences[layer].append(1 if layer in active_layers else 0)
+                layer_sequences[layer].append(
+                    1 if layer in active_layers else 0)
 
         # 计算时序一致性
         for layer, sequence in layer_sequences.items():
             if len(sequence) >= window_size:
                 # 计算层切换频率
-                switches = sum(1 for i in range(1, len(sequence)) if sequence[i] != sequence[i-1])
+                switches = sum(1 for i in range(1, len(sequence))
+                               if sequence[i] != sequence[i-1])
                 switch_rate = switches / (len(sequence) - 1)
                 consistency_metrics[f'{layer}_switch_rate'] = switch_rate
 
@@ -257,7 +267,8 @@ class HierarchicalEvaluator(BaseEvaluator):
                 continuous_lengths.append(current_length)
 
                 if continuous_lengths:
-                    consistency_metrics[f'{layer}_stability'] = 1.0 / (1.0 + np.std(continuous_lengths))
+                    consistency_metrics[f'{layer}_stability'] = 1.0 / \
+                        (1.0 + np.std(continuous_lengths))
 
         return consistency_metrics
 
@@ -267,10 +278,12 @@ class HierarchicalEvaluator(BaseEvaluator):
         expected_rates = self.config.hierarchical_evaluation.layer_activation_analysis.expected_rates
 
         for layer, expected_rate in expected_rates.items():
-            actual_rate = hierarchical_metrics.get(f'{layer}_activation_rate', 0.0)
+            actual_rate = hierarchical_metrics.get(
+                f'{layer}_activation_rate', 0.0)
             deviation = abs(actual_rate - expected_rate)
             check_results[f'{layer}_rate_deviation'] = deviation
-            check_results[f'{layer}_rate_check'] = 1.0 if deviation < 0.1 else 0.0  # 10%容差
+            # 10%容差
+            check_results[f'{layer}_rate_check'] = 1.0 if deviation < 0.1 else 0.0
 
         return check_results
 
@@ -354,16 +367,19 @@ class HierarchicalEvaluator(BaseEvaluator):
         performance_metrics.update(hierarchical_metrics)
 
         # 层一致性分析
-        consistency_metrics = self._analyze_layer_consistency(all_episode_results)
+        consistency_metrics = self._analyze_layer_consistency(
+            all_episode_results)
         performance_metrics.update(consistency_metrics)
 
         # 检查预期激活率
-        rate_check_results = self._check_expected_activation_rates(hierarchical_metrics)
+        rate_check_results = self._check_expected_activation_rates(
+            hierarchical_metrics)
         performance_metrics.update(rate_check_results)
 
         # 计算总体性能指标
         if all_episode_results:
-            avg_inference_time = np.mean([r['average_inference_time'] for r in all_episode_results])
+            avg_inference_time = np.mean(
+                [r['average_inference_time'] for r in all_episode_results])
             performance_metrics['overall_avg_inference_time'] = avg_inference_time
 
             total_steps = sum(r['num_steps'] for r in all_episode_results)
@@ -388,7 +404,8 @@ class HierarchicalEvaluator(BaseEvaluator):
             timing_info={'total_evaluation_time': time.time()}
         )
 
-        self.logger.info(f"Hierarchical evaluation completed: {len(all_episode_results)} episodes, {self.total_inference_steps} steps")
+        self.logger.info(
+            f"Hierarchical evaluation completed: {len(all_episode_results)} episodes, {self.total_inference_steps} steps")
 
         return results
 
@@ -411,7 +428,8 @@ class HierarchicalEvaluator(BaseEvaluator):
                 self._plot_coordination_matrix(results)
 
         except ImportError:
-            self.logger.warning("Matplotlib not available, skipping hierarchical plot generation")
+            self.logger.warning(
+                "Matplotlib not available, skipping hierarchical plot generation")
         except Exception as e:
             self.logger.error(f"Error generating hierarchical plots: {e}")
 
@@ -420,10 +438,12 @@ class HierarchicalEvaluator(BaseEvaluator):
         import matplotlib.pyplot as plt
 
         layers = list(self.layer_activation_stats.keys())
-        activations = [self.layer_activation_stats[layer] / max(self.total_inference_steps, 1) for layer in layers]
+        activations = [self.layer_activation_stats[layer] /
+                       max(self.total_inference_steps, 1) for layer in layers]
 
         plt.figure(figsize=(10, 6))
-        bars = plt.bar(layers, activations, color=['red', 'blue', 'green', 'orange'][:len(layers)])
+        bars = plt.bar(layers, activations, color=[
+                       'red', 'blue', 'green', 'orange'][:len(layers)])
         plt.xlabel('Layers')
         plt.ylabel('Activation Rate')
         plt.title('Hierarchical Layer Activation Rates')
@@ -432,11 +452,11 @@ class HierarchicalEvaluator(BaseEvaluator):
         # 添加数值标签
         for bar, activation in zip(bars, activations):
             plt.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.01,
-                    f'{activation:.3f}', ha='center', va='bottom')
+                     f'{activation:.3f}', ha='center', va='bottom')
 
         plt.tight_layout()
         plt.savefig(self.output_dir / 'layer_activation_rates.png',
-                   dpi=self.config.visualization.dpi)
+                    dpi=self.config.visualization.dpi)
         plt.close()
 
     def _plot_latency_distribution(self, results: EvaluationResults) -> None:
@@ -446,7 +466,8 @@ class HierarchicalEvaluator(BaseEvaluator):
         inference_times = []
         for episode_result in results.episode_results:
             if 'average_inference_time' in episode_result:
-                inference_times.append(episode_result['average_inference_time'])
+                inference_times.append(
+                    episode_result['average_inference_time'])
 
         if not inference_times:
             return
@@ -454,7 +475,7 @@ class HierarchicalEvaluator(BaseEvaluator):
         plt.figure(figsize=(10, 6))
         plt.hist(inference_times, bins=20, alpha=0.7, edgecolor='black')
         plt.axvline(self.config.hierarchical_evaluation.latency_budget_ms,
-                   color='red', linestyle='--', label=f'Budget ({self.config.hierarchical_evaluation.latency_budget_ms}ms)')
+                    color='red', linestyle='--', label=f'Budget ({self.config.hierarchical_evaluation.latency_budget_ms}ms)')
         plt.xlabel('Inference Time (ms)')
         plt.ylabel('Frequency')
         plt.title('Inference Time Distribution')
@@ -463,7 +484,7 @@ class HierarchicalEvaluator(BaseEvaluator):
 
         plt.tight_layout()
         plt.savefig(self.output_dir / 'latency_distribution.png',
-                   dpi=self.config.visualization.dpi)
+                    dpi=self.config.visualization.dpi)
         plt.close()
 
     def _plot_coordination_matrix(self, results: EvaluationResults) -> None:
@@ -488,5 +509,5 @@ class HierarchicalEvaluator(BaseEvaluator):
 
         plt.tight_layout()
         plt.savefig(self.output_dir / 'coordination_matrix.png',
-                   dpi=self.config.visualization.dpi)
+                    dpi=self.config.visualization.dpi)
         plt.close()

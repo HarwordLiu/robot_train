@@ -31,8 +31,8 @@ training:
   drop_last: False
 
   # 测试训练模式：快速验证用，每个课程学习阶段跑指定数量的epoch
-  test_training_mode: True # 设置为True启用测试模式
-  test_training_epochs: 1 # 测试模式下每个阶段的epoch数量
+  test_training_mode: False # 设置为False启用正常训练模式
+  test_training_epochs: 10 # 正常训练模式下每个阶段的epoch数量
   max_training_step: null
   resume: False
   resume_timestamp: task_specific_run_20250930_030432
