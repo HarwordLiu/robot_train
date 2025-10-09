@@ -1,3 +1,4 @@
-# Docker ROS 环境配置（host 网络模式）
+# Docker ROS 环境配置
+# 确保 Docker 容器启动时使用 --network host 或 -p 11311:11311
 export ROS_MASTER_URI=http://localhost:11311
 export ROS_IP=127.0.0.1
