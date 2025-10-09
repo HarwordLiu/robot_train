@@ -6,6 +6,9 @@
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -f "$SCRIPT_ROOT/.ros_docker_desktop_env" ]; then
     source "$SCRIPT_ROOT/.ros_docker_desktop_env"
+    # 显式导出环境变量，确保子进程可以继承
+    export ROS_MASTER_URI
+    export ROS_IP
     echo "✅ 已加载 ROS 环境配置"
     echo "   ROS_MASTER_URI=$ROS_MASTER_URI"
     echo "   ROS_IP=$ROS_IP"
