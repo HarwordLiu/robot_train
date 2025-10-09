@@ -7,7 +7,7 @@ defaults:
 
 # 测试数据配置
 test_data:
-  root: '/mnt/e/robot/data/data/task1/lerobot/1-400' # 数据根目录
+  root: '/root/robot/data/task1/data/lerobot/1-400/' # 数据根目录
   repo_id: 'task_400_episodes' # 数据集ID
   episodes_range: [0, 50] # 测试episodes范围 [start, end]
   batch_size: 1 # 批处理大小（离线评估通常为1）
