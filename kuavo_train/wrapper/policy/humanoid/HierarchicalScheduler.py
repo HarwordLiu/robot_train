@@ -26,14 +26,16 @@ class HierarchicalScheduler(nn.Module):
         self.layers = self._build_layers()
 
         # 调度配置
-        self.layer_priorities = {name: layer.get_priority() for name, layer in self.layers.items()}
+        self.layer_priorities = {name: layer.get_priority()
+                                 for name, layer in self.layers.items()}
         self.layer_weights = hierarchical_config.get('layer_weights', {})
 
         # 性能监控
         self.total_forward_calls = 0
         self.layer_activation_stats = {name: 0 for name in self.layers.keys()}
 
-        print(f"🏗️ HierarchicalScheduler initialized with layers: {list(self.layers.keys())}")
+        print(
+            f"🏗️ HierarchicalScheduler initialized with layers: {list(self.layers.keys())}")
 
     def _build_layers(self) -> nn.ModuleDict:
         """构建四个层次的网络"""
@@ -82,14 +84,25 @@ class HierarchicalScheduler(nn.Module):
         outputs = {}
         context = self._build_context(batch, task_info)
 
+        # 记录本次forward调用的层激活信息（用于详细日志）
+        activation_summary = {
+            'forward_call_id': self.total_forward_calls,
+            'layers_evaluated': [],
+            'layers_activated': [],
+            'layers_skipped': [],
+        }
+
         # 按优先级顺序处理各层
         for layer_name in self._get_processing_order():
             if layer_name not in self.layers:
                 continue
             layer = self.layers[layer_name]
 
+            activation_summary['layers_evaluated'].append(layer_name)
+
             # 检查是否应该激活该层
             if not layer.should_activate(batch, context):
+                activation_summary['layers_skipped'].append(layer_name)
                 continue
 
             # 执行层的前向传播（带时间监控）
@@ -97,6 +110,7 @@ class HierarchicalScheduler(nn.Module):
                 layer_output = layer.forward_with_timing(batch, context)
                 outputs[layer_name] = layer_output
                 self.layer_activation_stats[layer_name] += 1
+                activation_summary['layers_activated'].append(layer_name)
 
                 # 更新上下文
                 context.update(layer_output)
@@ -104,7 +118,8 @@ class HierarchicalScheduler(nn.Module):
                 # 安全层可以立即返回（紧急情况）
                 if layer_name == 'safety' and layer_output.get('emergency', False):
                     print(f"🚨 Emergency stop triggered by safety layer")
-                    return {layer_name: layer_output}
+                    outputs['_activation_summary'] = activation_summary
+                    return {layer_name: layer_output, '_activation_summary': activation_summary}
 
             except Exception as e:
                 print(f"❌ Error in {layer_name} layer: {e}")
@@ -114,12 +129,15 @@ class HierarchicalScheduler(nn.Module):
                     'execution_time_ms': 0
                 }
 
+        # 添加激活总结到输出（供日志记录使用）
+        outputs['_activation_summary'] = activation_summary
+
         return outputs
 
     def inference_mode(self,
-                      batch: Dict[str, torch.Tensor],
-                      task_info: Optional[Dict[str, Any]] = None,
-                      latency_budget_ms: float = 50.0) -> Dict[str, Any]:
+                       batch: Dict[str, torch.Tensor],
+                       task_info: Optional[Dict[str, Any]] = None,
+                       latency_budget_ms: float = 50.0) -> Dict[str, Any]:
         """
         推理模式：根据延迟预算自适应激活层
 
@@ -136,20 +154,35 @@ class HierarchicalScheduler(nn.Module):
         context = self._build_context(batch, task_info)
         remaining_budget = latency_budget_ms
 
+        # 记录推理模式的层激活信息
+        activation_summary = {
+            'mode': 'inference',
+            'latency_budget_ms': latency_budget_ms,
+            'layers_evaluated': [],
+            'layers_activated': [],
+            'layers_skipped': [],
+            'layers_budget_exceeded': [],
+        }
+
         # 按优先级顺序处理，在预算内尽可能多地激活层
         for layer_name in self._get_processing_order():
             if layer_name not in self.layers:
                 continue
             layer = self.layers[layer_name]
 
+            activation_summary['layers_evaluated'].append(layer_name)
+
             # 检查是否有足够的时间预算
             layer_budget = layer.get_latency_budget()
             if remaining_budget < layer_budget:
-                print(f"⏰ Skipping {layer_name} due to time budget ({remaining_budget:.1f}ms < {layer_budget}ms)")
+                print(
+                    f"⏰ Skipping {layer_name} due to time budget ({remaining_budget:.1f}ms < {layer_budget}ms)")
+                activation_summary['layers_budget_exceeded'].append(layer_name)
                 continue
 
             # 检查是否应该激活
             if not layer.should_activate(batch, context):
+                activation_summary['layers_skipped'].append(layer_name)
                 continue
 
             # 执行层推理
@@ -158,6 +191,7 @@ class HierarchicalScheduler(nn.Module):
                 layer_output = layer.forward_with_timing(batch, context)
                 outputs[layer_name] = layer_output
                 context.update(layer_output)
+                activation_summary['layers_activated'].append(layer_name)
 
                 # 更新剩余预算
                 layer_time = (time.time() - layer_start) * 1000
@@ -175,7 +209,9 @@ class HierarchicalScheduler(nn.Module):
         outputs['_inference_stats'] = {
             'total_time_ms': total_time,
             'budget_ms': latency_budget_ms,
-            'within_budget': total_time <= latency_budget_ms
+            'remaining_budget_ms': remaining_budget,
+            'within_budget': total_time <= latency_budget_ms,
+            'activation_summary': activation_summary,
         }
 
         return outputs
@@ -201,7 +237,8 @@ class HierarchicalScheduler(nn.Module):
         """设置特定层的启用状态"""
         if layer_name in self.layers:
             self.layers[layer_name].set_enabled(enabled)
-            print(f"📝 Layer {layer_name} {'enabled' if enabled else 'disabled'}")
+            print(
+                f"📝 Layer {layer_name} {'enabled' if enabled else 'disabled'}")
 
     def get_active_layers(self) -> List[str]:
         """获取当前启用的层列表"""
@@ -249,7 +286,8 @@ class HierarchicalScheduler(nn.Module):
 
     def auto_tune_layers(self, target_latency_ms: float = 50.0):
         """根据目标延迟自动调整层的启用状态"""
-        print(f"🔧 Auto-tuning layers for target latency: {target_latency_ms}ms")
+        print(
+            f"🔧 Auto-tuning layers for target latency: {target_latency_ms}ms")
 
         # 获取各层的平均执行时间
         layer_times = {}
@@ -269,7 +307,8 @@ class HierarchicalScheduler(nn.Module):
                 self.set_layer_enabled(layer_name, False)
                 print(f"⚠️ Disabled {layer_name} to meet latency target")
 
-        print(f"✅ Auto-tuning complete. Estimated latency: {cumulative_time:.1f}ms")
+        print(
+            f"✅ Auto-tuning complete. Estimated latency: {cumulative_time:.1f}ms")
 
     def __repr__(self) -> str:
         layer_info = ", ".join([f"{name}({'✓' if layer.is_enabled() else '✗'})"

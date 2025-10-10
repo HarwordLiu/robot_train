@@ -64,6 +64,9 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
             self.task_layer_weights = None
             self.current_curriculum_stage = None
 
+        # 用于存储最后一次推理的层输出（供日志记录使用）
+        self._last_layer_outputs = None
+
     def _init_hierarchical_components(self, config, hierarchical_config):
         """初始化分层架构组件"""
         try:
@@ -377,6 +380,9 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
         with torch.no_grad():
             layer_outputs = self.scheduler(batch, task_info)
 
+        # 保存layer_outputs供日志记录使用
+        self._last_layer_outputs = layer_outputs
+
         # 从分层输出中提取最终动作
         return self._extract_action_from_layers(layer_outputs, batch)
 
@@ -455,6 +461,17 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
 
         print(
             f"✅ 已恢复层状态: 阶段={self.current_curriculum_stage}, 激活层={self.enabled_layers}")
+
+    def get_last_layer_outputs(self) -> Optional[Dict[str, Any]]:
+        """
+        获取最后一次推理的层输出信息（用于日志记录）
+
+        Returns:
+            Dict: 层输出信息，如果不是分层架构或未执行推理则返回None
+        """
+        if not self.use_hierarchical:
+            return None
+        return self._last_layer_outputs
 
     def print_architecture_summary(self):
         """打印架构摘要"""

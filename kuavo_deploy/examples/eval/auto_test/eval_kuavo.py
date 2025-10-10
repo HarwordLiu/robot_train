@@ -22,6 +22,8 @@ pip install -e ".[pusht]"
 ```
 """
 
+from kuavo_deploy.kuavo_env.kuavo_real_env.KuavoRealEnv import KuavoRealEnv
+from kuavo_deploy.kuavo_env.kuavo_sim_env.KuavoSimEnv import KuavoSimEnv
 import subprocess
 import sys
 from std_srvs.srv import Trigger, TriggerRequest, TriggerResponse
@@ -55,11 +57,10 @@ import traceback
 from geometry_msgs.msg import PoseStamped
 from configs.deploy.config_inference import load_inference_config
 from kuavo_deploy.utils.logging_utils import setup_logger
+from kuavo_deploy.utils.inference_logger import InferenceLogger
 log_model = setup_logger("model")
 log_robot = setup_logger("robot")
 
-from kuavo_deploy.kuavo_env.kuavo_sim_env.KuavoSimEnv import KuavoSimEnv
-from kuavo_deploy.kuavo_env.kuavo_real_env.KuavoRealEnv import KuavoRealEnv
 
 def pause_callback(msg):
     if msg.data:
@@ -67,14 +68,19 @@ def pause_callback(msg):
     else:
         pause_flag.clear()
 
+
 def stop_callback(msg):
     if msg.data:
         stop_flag.set()
 
-pause_sub = rospy.Subscriber('/kuavo/pause_state', Bool, pause_callback, queue_size=10)
-stop_sub = rospy.Subscriber('/kuavo/stop_state', Bool, stop_callback, queue_size=10)
+
+pause_sub = rospy.Subscriber(
+    '/kuavo/pause_state', Bool, pause_callback, queue_size=10)
+stop_sub = rospy.Subscriber(
+    '/kuavo/stop_state', Bool, stop_callback, queue_size=10)
 stop_flag = threading.Event()
 pause_flag = threading.Event()
+
 
 def check_control_signals():
     """检查控制信号"""
@@ -85,20 +91,22 @@ def check_control_signals():
         if stop_flag.is_set():
             log_robot.info("🛑 机械臂运动被停止")
             return False
-    
+
     # 检查是否需要停止
     if stop_flag.is_set():
         log_robot.info("🛑 收到停止信号，退出机械臂运动")
         return False
-        
+
     return True  # 正常继续
-    
+
 
 def img_preprocess(image, device="cpu"):
     return to_tensor(image).unsqueeze(0).to(device, non_blocking=True)
 
+
 def depth_preprocess(depth, device="cpu"):
-    return torch.tensor(depth,dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
+    return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
+
 
 def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     """
@@ -113,21 +121,25 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     """
 
     if device.type == 'cpu':
-        log_model.warning("Warning: Using CPU for inference, this may be slow.")
+        log_model.warning(
+            "Warning: Using CPU for inference, this may be slow.")
         time.sleep(3)
 
     if policy_type == 'diffusion':
-        policy = CustomDiffusionPolicyWrapper.from_pretrained(Path(pretrained_path),strict=True)
+        policy = CustomDiffusionPolicyWrapper.from_pretrained(
+            Path(pretrained_path), strict=True)
     elif policy_type == 'act':
-        policy = ACTPolicy.from_pretrained(Path(pretrained_path),strict=True)
+        policy = ACTPolicy.from_pretrained(Path(pretrained_path), strict=True)
     elif policy_type == 'hierarchical_diffusion':
         log_model.info("🤖 Loading Hierarchical Diffusion Policy...")
-        policy = HumanoidDiffusionPolicy.from_pretrained(Path(pretrained_path), strict=True)
+        policy = HumanoidDiffusionPolicy.from_pretrained(
+            Path(pretrained_path), strict=True)
         # Print hierarchical architecture info if available
         if hasattr(policy, 'print_architecture_summary'):
             policy.print_architecture_summary()
     else:
-        raise ValueError(f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion'")
+        raise ValueError(
+            f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion'")
 
     policy.eval()
     policy.to(device)
@@ -139,11 +151,15 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
 
     return policy
 
+
 success_evt = threading.Event()
+
+
 def env_success_callback(msg):
     log_model.info("env_success_callback!")
     if msg.data:
         success_evt.set()
+
 
 # Globals to store latest tracked positions
 latest_object_position = None
@@ -151,21 +167,26 @@ latest_marker1_position = None
 latest_marker2_position = None
 latest_object_orientation = None
 
+
 def box_grab_callback(msg):
     global latest_object_position, latest_object_orientation
     p = msg.pose.position
     latest_object_position = [p.x, p.y, p.z]
-    latest_object_orientation = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
+    latest_object_orientation = [
+        msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
+
 
 def marker1_callback(msg):
     global latest_marker1_position
     p = msg.pose.position
     latest_marker1_position = [p.x, p.y, p.z]
 
+
 def marker2_callback(msg):
     global latest_marker2_position
     p = msg.pose.position
     latest_marker2_position = [p.x, p.y, p.z]
+
 
 def check_rostopics(task):
     topics = {}
@@ -178,7 +199,7 @@ def check_rostopics(task):
 
     log_robot.info(f"检查ROS话题 ({len(topics)}个):")
     log_robot.info("=" * 50)
-        
+
     available = 0
     for topic, msg_type in topics.items():
         try:
@@ -188,21 +209,22 @@ def check_rostopics(task):
                 msg_class = PoseStamped
             else:
                 raise ValueError(f"Unsupported message type: {msg_type}")
-            
+
             # 检查话题
             start_time = time.time()
             rospy.wait_for_message(topic, msg_class, timeout=1.0)
             response_time = time.time() - start_time
-            
+
             log_robot.info(f"✅ {topic} ({response_time:.3f}s)")
             available += 1
-            
+
         except Exception as e:
             log_robot.warning(f"❌ {topic}: {str(e)[:50]}...")
-    
+
     log_robot.info("=" * 50)
     log_robot.info(f"结果: {available}/{len(topics)} 个话题可用")
     return available == len(topics)
+
 
 def main(config_path: str, episode: int):
     # load config
@@ -218,10 +240,16 @@ def main(config_path: str, episode: int):
     epoch = cfg.epoch
     env_name = cfg.env_name
 
-    pretrained_path = Path(f"outputs/train/{task}/{method}/{timestamp}/epoch{epoch}")
-    output_directory = Path(f"outputs/eval/{task}/{method}/{timestamp}/epoch{epoch}")
+    pretrained_path = Path(
+        f"outputs/train/{task}/{method}/{timestamp}/epoch{epoch}")
+    output_directory = Path(
+        f"outputs/eval/{task}/{method}/{timestamp}/epoch{epoch}")
     # Create a directory to store the video of the evaluation
     output_directory.mkdir(parents=True, exist_ok=True)
+
+    # 创建推理日志目录
+    inference_log_dir = output_directory / "inference_logs"
+    inference_log_dir.mkdir(parents=True, exist_ok=True)
 
     # create json file
     json_file_path = output_directory / "evaluation_autotest.json"
@@ -246,10 +274,11 @@ def main(config_path: str, episode: int):
     rospy.Subscriber("/simulator/success", Bool, env_success_callback)
     start_service = rospy.ServiceProxy('/simulator/start', Trigger)
     if "task1" in task:
-        rospy.Subscriber("/mujoco/box_grab/pose", PoseStamped, box_grab_callback)
+        rospy.Subscriber("/mujoco/box_grab/pose",
+                         PoseStamped, box_grab_callback)
         rospy.Subscriber("/mujoco/marker1/pose", PoseStamped, marker1_callback)
         rospy.Subscriber("/mujoco/marker2/pose", PoseStamped, marker2_callback)
-    
+
     check_rostopics(task)
 
     episode_record = {
@@ -261,12 +290,14 @@ def main(config_path: str, episode: int):
 
     # We can verify that the shapes of the features expected by the policy match the ones from the observations
     # produced by the environment
-    log_model.info(f"policy.config.input_features: {policy.config.input_features}")
+    log_model.info(
+        f"policy.config.input_features: {policy.config.input_features}")
     log_robot.info(f"env.observation_space: {env.observation_space}")
 
     # Similarly, we can check that the actions produced by the policy will match the actions expected by the
     # environment
-    log_model.info(f"policy.config.output_features: {policy.config.output_features}")
+    log_model.info(
+        f"policy.config.output_features: {policy.config.output_features}")
     log_robot.info(f"env.action_space: {env.action_space}")
 
     # Reset the policy and environments to prepare for rollout
@@ -274,12 +305,23 @@ def main(config_path: str, episode: int):
     numpy_observation, info = env.reset(seed=seed)
     start_service(TriggerRequest())
 
+    # 创建推理日志记录器
+    inference_logger = InferenceLogger(
+        output_dir=inference_log_dir,
+        episode_idx=episode,
+        log_every_n_steps=1,  # 每步都记录（可根据需要调整）
+        save_detailed_layers=(
+            policy_type == 'hierarchical_diffusion')  # 仅分层架构记录详细层信息
+    )
+    log_model.info(f"📝 推理日志记录器已创建: {inference_log_dir}")
+
     # Prepare to collect every rewards and all the frames of the episode,
     # from initial state to final state.
     rewards = []
     # Render frame of the initial state
     # frames.append(env.render())
-    cam_keys = [k for k in numpy_observation.keys() if "images" in k or "depth" in k]
+    cam_keys = [k for k in numpy_observation.keys(
+    ) if "images" in k or "depth" in k]
     frame_map = {k: [] for k in cam_keys}
 
     steps_records = []
@@ -292,38 +334,68 @@ def main(config_path: str, episode: int):
         if not check_control_signals():
             log_robot.info("🛑 收到停止信号，退出机械臂运动")
             sys.exit(1)
-        
+
         start_time = time.time()
         # Prepare observation for the policy running in Pytorch
 
         observation = {}
-        
-        for k,v in numpy_observation.items():
+        observation_shapes = {}
+
+        for k, v in numpy_observation.items():
             if "images" in k:
                 observation[k] = img_preprocess(v, device=device)
+                observation_shapes[k] = observation[k].shape
             elif "state" in k:
-                observation[k] = torch.from_numpy(v).float().unsqueeze(0).to(device, non_blocking=True)
+                observation[k] = torch.from_numpy(v).float().unsqueeze(
+                    0).to(device, non_blocking=True)
+                observation_shapes[k] = observation[k].shape
             elif "depth" in k:
                 observation[k] = depth_preprocess(v, device=device)
+                observation_shapes[k] = observation[k].shape
 
         with torch.inference_mode():
             action = policy.select_action(observation)
+
+        # 获取层输出信息（仅分层架构）
+        layer_outputs = None
+        if policy_type == 'hierarchical_diffusion' and hasattr(policy, 'get_last_layer_outputs'):
+            layer_outputs = policy.get_last_layer_outputs()
+
+        inference_time = time.time() - start_time
+
         numpy_action = action.squeeze(0).cpu().numpy()
         log_model.debug(f"numpy_action: {numpy_action}")
+
+        # 记录推理信息到日志
+        inference_logger.log_step(
+            step=step,
+            action=numpy_action,
+            observation_shapes=observation_shapes,
+            layer_outputs=layer_outputs,
+            inference_time=inference_time,
+            additional_info={
+                'reward_sum': sum(rewards),
+            }
+        )
 
         # Clip the action to the action space limits
         if use_delta:
             if env.real:
                 if env.which_arm == "both":
                     for i in [(0, 7), (8, 15)]:
-                        numpy_action[i[0]:i[1]] = np.clip(numpy_action[i[0]:i[1]], -0.05, 0.05) + env.start_state[i[0]:i[1]]
+                        numpy_action[i[0]:i[1]] = np.clip(
+                            numpy_action[i[0]:i[1]], -0.05, 0.05) + env.start_state[i[0]:i[1]]
                     env.start_state = np.concatenate([
-                        np.clip(numpy_action[0:7], env.action_space.low[0:7], env.action_space.high[0:7]),
-                        np.clip(numpy_action[8:15], env.action_space.low[8:15], env.action_space.high[8:15])
+                        np.clip(
+                            numpy_action[0:7], env.action_space.low[0:7], env.action_space.high[0:7]),
+                        np.clip(
+                            numpy_action[8:15], env.action_space.low[8:15], env.action_space.high[8:15])
                     ])
                 else:
-                    numpy_action[:7] = np.clip(numpy_action[:7], -0.05, 0.05) + env.start_state[:7]
-                    env.start_state = np.clip(numpy_action[:7], env.action_space.low[:7], env.action_space.high[:7])
+                    numpy_action[:7] = np.clip(
+                        numpy_action[:7], -0.05, 0.05) + env.start_state[:7]
+                    env.start_state = np.clip(
+                        numpy_action[:7], env.action_space.low[:7], env.action_space.high[:7])
             else:
                 if env.which_arm == "both":
                     numpy_action[:7] = np.clip(numpy_action[:7], -0.1, 0.1)
@@ -333,7 +405,8 @@ def main(config_path: str, episode: int):
                     numpy_action += numpy_observation["observation.state"]
 
         # 执行动作
-        numpy_observation, reward, terminated, truncated, info = env.step(numpy_action)
+        numpy_observation, reward, terminated, truncated, info = env.step(
+            numpy_action)
         rewards.append(reward)
 
         # Record step data
@@ -347,7 +420,8 @@ def main(config_path: str, episode: int):
 
         # 相机帧记录
         for k in cam_keys:
-            frame_map[k].append(observation[k].squeeze(0).cpu().numpy().transpose(1, 2, 0))
+            frame_map[k].append(observation[k].squeeze(
+                0).cpu().numpy().transpose(1, 2, 0))
 
         # The rollout is considered done when the success state is reached (i.e. terminated is True),
         # or the maximum number of iterations is reached (i.e. truncated is True)
@@ -355,12 +429,25 @@ def main(config_path: str, episode: int):
         done = done or success_evt.is_set()
         step += 1
 
-        end_time = time.time()
-        log_model.info(f"Step {step} time: {end_time - start_time:.3f}s")
-    
+        # 注意：这里的inference_time已经在前面计算过了，不需要再次计算
+        log_model.info(f"Step {step} inference time: {inference_time:.3f}s")
+
+    # 保存回合总结
+    success = success_evt.is_set()
+    total_reward = sum(rewards)
+    inference_logger.save_episode_summary(
+        success=success,
+        total_reward=total_reward,
+        additional_stats={
+            'episode_steps': step,
+            'marker1_position': latest_marker1_position,
+            'marker2_position': latest_marker2_position,
+        }
+    )
+
     # Get the speed of environment (i.e. its number of frames per second).
     fps = env.ros_rate
-    
+
     for cam in cam_keys:
         frames = frame_map[cam]
         output_path = output_directory / f"rollout_{episode}_{cam}.mp4"
@@ -394,6 +481,7 @@ def main(config_path: str, episode: int):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
     sys.exit(0 if success else 1)  # 返回给父进程
+
 
 def kuavo_eval(config_path: Path, episode: int):
     main(config_path, episode)

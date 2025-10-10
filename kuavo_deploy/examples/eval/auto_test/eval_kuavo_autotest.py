@@ -22,6 +22,8 @@ pip install -e ".[pusht]"
 ```
 """
 
+from kuavo_deploy.kuavo_env.kuavo_real_env.KuavoRealEnv import KuavoRealEnv
+from kuavo_deploy.kuavo_env.kuavo_sim_env.KuavoSimEnv import KuavoSimEnv
 import subprocess
 import sys
 from std_srvs.srv import Trigger, TriggerRequest, TriggerResponse
@@ -53,11 +55,10 @@ import json
 
 from configs.deploy.config_inference import load_inference_config
 from kuavo_deploy.utils.logging_utils import setup_logger
+from kuavo_deploy.utils.inference_logger import InferenceLogger
 log_model = setup_logger("model")
 log_robot = setup_logger("robot")
 
-from kuavo_deploy.kuavo_env.kuavo_sim_env.KuavoSimEnv import KuavoSimEnv
-from kuavo_deploy.kuavo_env.kuavo_real_env.KuavoRealEnv import KuavoRealEnv
 
 def pause_callback(msg):
     if msg.data:
@@ -65,14 +66,19 @@ def pause_callback(msg):
     else:
         pause_flag.clear()
 
+
 def stop_callback(msg):
     if msg.data:
         stop_flag.set()
 
-pause_sub = rospy.Subscriber('/kuavo/pause_state', Bool, pause_callback, queue_size=10)
-stop_sub = rospy.Subscriber('/kuavo/stop_state', Bool, stop_callback, queue_size=10)
+
+pause_sub = rospy.Subscriber(
+    '/kuavo/pause_state', Bool, pause_callback, queue_size=10)
+stop_sub = rospy.Subscriber(
+    '/kuavo/stop_state', Bool, stop_callback, queue_size=10)
 stop_flag = threading.Event()
 pause_flag = threading.Event()
+
 
 def check_control_signals():
     """检查控制信号"""
@@ -83,19 +89,23 @@ def check_control_signals():
         if stop_flag.is_set():
             log_robot.info("🛑 机械臂运动被停止")
             return False
-    
+
     # 检查是否需要停止
     if stop_flag.is_set():
         log_robot.info("🛑 收到停止信号，退出机械臂运动")
         return False
-        
+
     return True  # 正常继续
 
+
 init_evt = threading.Event()
+
+
 def env_init_service(req):
     log_robot.info(f"env_init_callback! req = {req}")
     init_evt.set()
     return TriggerResponse(success=True, message="Env init successful")
+
 
 def safe_reset_service(reset_service) -> None:
     """安全重置服务"""
@@ -109,6 +119,7 @@ def safe_reset_service(reset_service) -> None:
     except rospy.ServiceException as e:
         log_robot.error(f"Reset service exception: {e}")
 
+
 def kuavo_eval_autotest(config_path: Path):
     """执行自动测试"""
     cfg = load_inference_config(config_path)
@@ -118,7 +129,8 @@ def kuavo_eval_autotest(config_path: Path):
     epoch = cfg.epoch
     eval_episodes = cfg.eval_episodes
 
-    output_directory = Path(f"outputs/eval/{task}/{method}/{timestamp}/epoch{epoch}")
+    output_directory = Path(
+        f"outputs/eval/{task}/{method}/{timestamp}/epoch{epoch}")
     # mkdir
     output_directory.mkdir(parents=True, exist_ok=True)
 
@@ -132,7 +144,7 @@ def kuavo_eval_autotest(config_path: Path):
     json_file_path = output_directory / "evaluation_autotest.json"
     episode_results = []
     episode_data = {
-        "task":task,
+        "task": task,
         "episode_num": 0,
         "episodes": [],
     }
@@ -165,9 +177,10 @@ def kuavo_eval_autotest(config_path: Path):
                 return
             time.sleep(5)
 
-        result = subprocess.run(['python', '-c', f'from kuavo_deploy.examples.eval.auto_test.eval_kuavo import kuavo_eval; kuavo_eval("{config_path}", {episode})'], 
+        result = subprocess.run(['python', '-c', f'from kuavo_deploy.examples.eval.auto_test.eval_kuavo import kuavo_eval; kuavo_eval("{config_path}", {episode})'],
                                 capture_output=False, text=True)
-        log_robot.info(f"Episode {episode+1} completed with return code: {result.returncode}")
+        log_robot.info(
+            f"Episode {episode+1} completed with return code: {result.returncode}")
 
         # 新增：记录episode结果到JSON
         episode_end_time = datetime.datetime.now().isoformat()
@@ -182,7 +195,8 @@ def kuavo_eval_autotest(config_path: Path):
 
         with log_file_path.open("a") as log_file:
             log_file.write("\n")
-            log_file.write(f"Success Count: {success_count} / Already eval episodes: {episode+1}")
+            log_file.write(
+                f"Success Count: {success_count} / Already eval episodes: {episode+1}")
 
     # Display final statistics
     log_model.info("\n" + "="*50)
@@ -192,6 +206,18 @@ def kuavo_eval_autotest(config_path: Path):
     log_model.info(f"📁 Videos and logs saved to: {output_directory}")
     log_model.info(f"📁 JSON results saved to: {json_file_path}")
     log_model.info("="*50)
+
+    # 创建聚合推理报告
+    inference_log_dir = output_directory / "inference_logs"
+    if inference_log_dir.exists():
+        try:
+            InferenceLogger.create_aggregated_report(
+                output_dir=inference_log_dir,
+                task_name=f"{task}_{method}"
+            )
+        except Exception as e:
+            log_model.warning(f"⚠️  创建聚合推理报告失败: {e}")
+
 
 if __name__ == "__main__":
     config_path = Path("test.yaml")
