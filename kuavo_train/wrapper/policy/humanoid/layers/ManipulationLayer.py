@@ -39,11 +39,17 @@ class ManipulationLayer(BaseLayer):
             # 默认配置：only_arm=true时的双臂+手爪配置
             self.state_dim = 16
 
+        # 计算实际的视觉输入维度（3个RGB相机 + 3个深度相机）
+        # head_cam_h: 3, depth_h: 1, wrist_cam_l: 3, depth_l: 1, wrist_cam_r: 3, depth_r: 1
+        # 总共: 3+1+3+1+3+1 = 12 通道
+        actual_visual_dim = 12  # 默认值，可以根据配置调整
+
+        # 视觉投影层：将实际的视觉维度投影到标准的visual_dim
+        self.visual_projection = nn.Linear(actual_visual_dim, self.visual_dim)
+
+        # 总输入投影层
         self.input_projection = nn.Linear(
             self.visual_dim + self.state_dim, self.hidden_size)
-
-        # 动态视觉投影层（用于适配不同数量的相机输入）
-        self._visual_projection = None
 
         # 主要的Transformer网络
         encoder_layer = nn.TransformerEncoderLayer(
@@ -144,15 +150,10 @@ class ManipulationLayer(BaseLayer):
         if visual_features_list:
             # 拼接所有相机特征 [batch_size, sum_of_channels]
             combined_visual = torch.cat(visual_features_list, dim=-1)
-            # 投影到固定维度
-            actual_visual_dim = combined_visual.shape[-1]
-            if actual_visual_dim != self.visual_dim:
-                # 动态创建投影层（推理时）
-                if not hasattr(self, '_visual_projection') or self._visual_projection is None or \
-                   self._visual_projection.in_features != actual_visual_dim:
-                    self._visual_projection = nn.Linear(
-                        actual_visual_dim, self.visual_dim).to(combined_visual.device)
-                combined_visual = self._visual_projection(combined_visual)
+
+            # 投影到标准视觉维度，使用固定的投影层
+            # 注意：如果实际输入维度与预期不符，会在训练/推理时报错，这是期望的行为
+            combined_visual = self.visual_projection(combined_visual)
 
             # 确保是3D tensor [batch_size, seq_len, visual_dim]
             if len(combined_visual.shape) == 2:
