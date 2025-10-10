@@ -12,7 +12,7 @@ timestamp: ${now:%Y%m%d_%H%M%S}
 # 使用的episodes范围
 episodes_to_use:
   - 0
-  - 199 # 使用前200个episodes
+  - 399 # 使用前200个episodes
 
 repoid: 'lerobot/${task}'
 root: '/root/robot/data/task1/data/lerobot/1-400/' # 任务1数据路径
