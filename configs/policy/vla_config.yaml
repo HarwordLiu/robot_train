@@ -85,7 +85,7 @@ policy:
   # ==================== Diffusion参数 ====================
   horizon: 16 # 动作序列长度
   n_action_steps: 8 # 每次执行的动作步数
-  n_obs_steps: 1 # 观测步数
+  n_obs_steps: 2 # 观测步数
   drop_n_last_frames: 7
 
   num_train_timesteps: 100
