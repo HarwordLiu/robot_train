@@ -36,7 +36,7 @@ training:
   test_training_epochs: 2
   max_training_step: null
   resume: False
-  resume_timestamp: run_20251010_145038/best
+  resume_timestamp: null
 
   # 优化器配置
   scheduler_name: cosine
