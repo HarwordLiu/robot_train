@@ -102,42 +102,68 @@ def check_control_signals():
     return True  # 正常继续
 
 
-def img_preprocess(image, device="cpu", target_size=None):
+def img_preprocess(image, device="cpu", target_size=None, crop_size=448):
     """
-    预处理RGB图像
+    预处理RGB图像（与训练保持一致：先crop再resize）
     
     Args:
         image: numpy array, shape (H, W, 3)
         device: torch device
-        target_size: tuple (height, width), 如果提供则resize到目标尺寸
+        target_size: tuple (height, width), resize的目标尺寸
+        crop_size: int, 中心裁剪的尺寸（默认448与训练一致）
     
     Returns:
         torch tensor, shape (1, 3, H, W)
     """
+    # 1. 中心裁剪到正方形（与训练一致，避免长宽比失真）
+    if crop_size is not None:
+        h, w = image.shape[:2]
+        # 计算中心裁剪的坐标
+        top = max(0, (h - crop_size) // 2)
+        left = max(0, (w - crop_size) // 2)
+        bottom = min(h, top + crop_size)
+        right = min(w, left + crop_size)
+        image = image[top:bottom, left:right]
+    
+    # 2. Resize到目标尺寸
     if target_size is not None and (image.shape[0] != target_size[0] or image.shape[1] != target_size[1]):
-        # Resize using cv2 (H, W, C) -> (target_H, target_W, C)
         image = cv2.resize(image, (target_size[1], target_size[0]), interpolation=cv2.INTER_LINEAR)
+    
     return to_tensor(image).unsqueeze(0).to(device, non_blocking=True)
 
 
-def depth_preprocess(depth, device="cpu", target_size=None):
+def depth_preprocess(depth, device="cpu", target_size=None, crop_size=448):
     """
-    预处理深度图像
+    预处理深度图像（与训练保持一致：先crop再resize）
     
     Args:
         depth: numpy array, shape (1, H, W)
         device: torch device
-        target_size: tuple (height, width), 如果提供则resize到目标尺寸
+        target_size: tuple (height, width), resize的目标尺寸
+        crop_size: int, 中心裁剪的尺寸（默认448与训练一致）
     
     Returns:
         torch tensor, shape (1, 1, H, W)
     """
+    # 1. 中心裁剪到正方形（与训练一致，避免长宽比失真）
+    if crop_size is not None and depth.shape[0] == 1:
+        depth_2d = depth[0]  # (H, W)
+        h, w = depth_2d.shape[:2]
+        # 计算中心裁剪的坐标
+        top = max(0, (h - crop_size) // 2)
+        left = max(0, (w - crop_size) // 2)
+        bottom = min(h, top + crop_size)
+        right = min(w, left + crop_size)
+        depth_2d = depth_2d[top:bottom, left:right]
+        depth = depth_2d[numpy.newaxis, ...]
+    
+    # 2. Resize到目标尺寸（使用NEAREST避免深度值被插值）
     if target_size is not None and depth.shape[0] == 1:
-        # Depth is (1, H, W), extract (H, W) for resize
         depth_2d = depth[0]
         if depth_2d.shape[0] != target_size[0] or depth_2d.shape[1] != target_size[1]:
             depth_2d = cv2.resize(depth_2d, (target_size[1], target_size[0]), interpolation=cv2.INTER_NEAREST)
-        depth = depth_2d[numpy.newaxis, ...]  # Add back channel dimension
+        depth = depth_2d[numpy.newaxis, ...]
+    
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
 
 

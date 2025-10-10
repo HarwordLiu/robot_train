@@ -65,7 +65,7 @@ device: 'cuda' # or "cpu"
 # 模型路径配置 - 指向VLA训练输出
 task: 'task_vla_16dim'
 method: 'vla_transformer'
-timestamp: 'run_20251010_141324' # 修改为你的训练时间戳
+timestamp: 'run_20251010_145038' # 修改为你的训练时间戳
 epoch: 10 # 使用训练保存的哪一个epoch
 
 max_episode_steps: 500 # 最大回合步数
