@@ -391,8 +391,19 @@ class HumanoidDiffusionPolicyWrapper(CustomDiffusionPolicyWrapper):
                                     batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """从分层输出中提取最终动作"""
         # 优先级处理：安全层可以覆盖其他层的输出
-        if 'safety' in layer_outputs and layer_outputs['safety'].get('emergency', False):
-            return layer_outputs['safety'].get('emergency_action', torch.zeros_like(batch.get('action', torch.zeros(1, 32))))
+        if 'safety' in layer_outputs:
+            emergency_tensor = layer_outputs['safety'].get('emergency', False)
+            if isinstance(emergency_tensor, torch.Tensor):
+                # 对于Tensor，检查是否有任何紧急情况
+                if emergency_tensor.numel() == 1:
+                    is_emergency = emergency_tensor.item()
+                else:
+                    is_emergency = torch.any(emergency_tensor).item()
+            else:
+                is_emergency = bool(emergency_tensor)
+
+            if is_emergency:
+                return layer_outputs['safety'].get('emergency_action', torch.zeros_like(batch.get('action', torch.zeros(1, 32))))
 
         # 正常情况下，使用最高级别可用层的输出
         for layer_name in ['planning', 'manipulation', 'gait', 'safety']:

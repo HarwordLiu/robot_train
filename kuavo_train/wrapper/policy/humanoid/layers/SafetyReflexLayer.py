@@ -252,6 +252,7 @@ class SafetyReflexLayer(BaseLayer):
             if emergency_tensor.numel() == 1:
                 return not emergency_tensor.item()
             else:
+                # 对于批处理，如果任何样本处于紧急状态，则认为系统不安全
                 return not torch.any(emergency_tensor).item()
 
     def __repr__(self) -> str:

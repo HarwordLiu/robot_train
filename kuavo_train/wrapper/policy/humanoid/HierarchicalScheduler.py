@@ -116,10 +116,21 @@ class HierarchicalScheduler(nn.Module):
                 context.update(layer_output)
 
                 # 安全层可以立即返回（紧急情况）
-                if layer_name == 'safety' and layer_output.get('emergency', False):
-                    print(f"🚨 Emergency stop triggered by safety layer")
-                    outputs['_activation_summary'] = activation_summary
-                    return {layer_name: layer_output, '_activation_summary': activation_summary}
+                if layer_name == 'safety':
+                    emergency_tensor = layer_output.get('emergency', False)
+                    if isinstance(emergency_tensor, torch.Tensor):
+                        # 对于Tensor，检查是否有任何紧急情况
+                        if emergency_tensor.numel() == 1:
+                            is_emergency = emergency_tensor.item()
+                        else:
+                            is_emergency = torch.any(emergency_tensor).item()
+                    else:
+                        is_emergency = bool(emergency_tensor)
+
+                    if is_emergency:
+                        print(f"🚨 Emergency stop triggered by safety layer")
+                        outputs['_activation_summary'] = activation_summary
+                        return {layer_name: layer_output, '_activation_summary': activation_summary}
 
             except Exception as e:
                 print(f"❌ Error in {layer_name} layer: {e}")
@@ -198,8 +209,19 @@ class HierarchicalScheduler(nn.Module):
                 remaining_budget -= layer_time
 
                 # 安全层紧急情况
-                if layer_name == 'safety' and layer_output.get('emergency', False):
-                    break
+                if layer_name == 'safety':
+                    emergency_tensor = layer_output.get('emergency', False)
+                    if isinstance(emergency_tensor, torch.Tensor):
+                        # 对于Tensor，检查是否有任何紧急情况
+                        if emergency_tensor.numel() == 1:
+                            is_emergency = emergency_tensor.item()
+                        else:
+                            is_emergency = torch.any(emergency_tensor).item()
+                    else:
+                        is_emergency = bool(emergency_tensor)
+
+                    if is_emergency:
+                        break
 
             except Exception as e:
                 print(f"❌ Inference error in {layer_name}: {e}")
