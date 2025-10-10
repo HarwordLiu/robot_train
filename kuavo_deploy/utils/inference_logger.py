@@ -156,29 +156,84 @@ class InferenceLogger:
                         loss_value = loss_value.item()
                     layer_record["loss"] = loss_value
 
-                # 记录紧急状态（安全层）
+                # 记录紧急状态（安全层）- 需要转换Tensor为Python类型
                 if 'emergency' in layer_output:
-                    layer_record["emergency"] = layer_output['emergency']
+                    emergency_value = layer_output['emergency']
+                    if torch.is_tensor(emergency_value):
+                        # 处理bool tensor或float tensor
+                        if emergency_value.numel() == 1:
+                            layer_record["emergency"] = bool(
+                                emergency_value.item())
+                        else:
+                            # 批次中有任何紧急情况
+                            layer_record["emergency"] = bool(
+                                torch.any(emergency_value).item())
+                    else:
+                        layer_record["emergency"] = bool(emergency_value)
 
                 # 记录动作信息
                 if 'action' in layer_output:
                     action = layer_output['action']
                     if torch.is_tensor(action):
                         action = action.cpu().numpy()
-                    layer_record["action_shape"] = action.shape
+                    layer_record["action_shape"] = list(action.shape)
                     layer_record["action_norm"] = float(np.linalg.norm(action))
 
                 # 记录其他可序列化的字段
                 for key, value in layer_output.items():
                     if key not in ['action', 'loss', 'execution_time_ms', 'emergency']:
-                        if isinstance(value, (int, float, str, bool)):
-                            layer_record[key] = value
-                        elif isinstance(value, (list, tuple)) and len(value) < 10:
-                            layer_record[key] = value
+                        # 转换为可序列化的类型
+                        serializable_value = self._make_serializable(value)
+                        if serializable_value is not None:
+                            layer_record[key] = serializable_value
 
             layer_info[layer_name] = layer_record
 
         return layer_info
+
+    def _make_serializable(self, value: Any) -> Any:
+        """将值转换为JSON可序列化的类型"""
+        if value is None:
+            return None
+        elif isinstance(value, (int, float, str, bool)):
+            return value
+        elif torch.is_tensor(value):
+            # Tensor转换为Python类型
+            if value.numel() == 1:
+                return float(value.item())
+            elif value.numel() <= 10:
+                return value.cpu().numpy().tolist()
+            else:
+                # 太大的tensor只记录统计信息
+                return {
+                    "shape": list(value.shape),
+                    "mean": float(value.mean().item()),
+                    "std": float(value.std().item()) if value.numel() > 1 else 0.0,
+                }
+        elif isinstance(value, np.ndarray):
+            if value.size <= 10:
+                return value.tolist()
+            else:
+                return {
+                    "shape": list(value.shape),
+                    "mean": float(np.mean(value)),
+                    "std": float(np.std(value)),
+                }
+        elif isinstance(value, (list, tuple)):
+            # 递归处理列表/元组
+            if len(value) <= 10:
+                return [self._make_serializable(v) for v in value]
+            else:
+                return f"<list of {len(value)} items>"
+        elif isinstance(value, dict):
+            # 递归处理字典（但限制深度）
+            if len(value) <= 20:
+                return {k: self._make_serializable(v) for k, v in value.items()}
+            else:
+                return f"<dict with {len(value)} keys>"
+        else:
+            # 其他类型转换为字符串
+            return str(value)
 
     def save_episode_summary(self,
                              success: bool,
