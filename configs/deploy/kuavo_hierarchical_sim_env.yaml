@@ -90,11 +90,16 @@ hierarchical:
   enable_performance_logging: True # 启用性能日志
   log_frequency: 100 # 每N步记录一次详细日志
 
+  # 推理日志配置（详细记录每步推理情况）
+  enable_inference_logging: True # 启用详细推理日志
+  inference_log_dir: 'outputs/inference_logs' # 推理日志保存目录
+  log_every_step: True # 是否每步都记录（False则使用log_frequency）
+
   # 层特化配置
   layer_configs:
     safety:
       response_time_ms: 10
-      enabled: True
+      enabled: False
     gait:
       response_time_ms: 20
       enabled: False # 仅手臂任务，禁用步态层

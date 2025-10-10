@@ -84,7 +84,33 @@ class SafetyReflexLayer(BaseLayer):
 
     def get_required_input_keys(self) -> List[str]:
         """安全层需要的输入"""
-        return ['observation.state']  # 关节状态和IMU数据
+        return ['observation.state', 'observation.imu']  # 关节状态和IMU数据
+
+    def _quaternion_to_euler(self, quat: torch.Tensor) -> tuple:
+        """
+        将四元数转换为欧拉角（roll, pitch）
+
+        Args:
+            quat: [batch_size, 4] 四元数 (x, y, z, w)
+
+        Returns:
+            roll: [batch_size] roll角度（弧度）
+            pitch: [batch_size] pitch角度（弧度）
+        """
+        x, y, z, w = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
+
+        # Roll (x-axis rotation)
+        sinr_cosp = 2 * (w * x + y * z)
+        cosr_cosp = 1 - 2 * (x * x + y * y)
+        roll = torch.atan2(sinr_cosp, cosr_cosp)
+
+        # Pitch (y-axis rotation)
+        sinp = 2 * (w * y - z * x)
+        # Use torch.clamp to avoid numerical issues
+        sinp = torch.clamp(sinp, -1.0, 1.0)
+        pitch = torch.asin(sinp)
+
+        return roll, pitch
 
     def forward(self, inputs: Dict[str, torch.Tensor], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -146,10 +172,36 @@ class SafetyReflexLayer(BaseLayer):
         # [batch_size] bool类型
         emergency = (emergency_score > self.emergency_threshold).squeeze(-1)
 
-        # 倾斜检测
-        # [batch_size, 2] (roll, pitch)
-        tilt_angles = self.tilt_detector(last_output)
-        tilt_angles_degrees = tilt_angles * 45.0  # 缩放到±45度范围
+        # 倾斜检测 - 使用真实IMU数据
+        imu_data = inputs.get('observation.imu')
+        use_real_imu = imu_data is not None and imu_data.numel() > 0
+
+        if use_real_imu:
+            # 处理IMU数据维度
+            if len(imu_data.shape) == 1:
+                # [13] -> [1, 13]
+                imu_data = imu_data.unsqueeze(0)
+            elif len(imu_data.shape) == 3:
+                # [batch_size, seq_len, 13] -> [batch_size, 13] (取最后一个时间步)
+                imu_data = imu_data[:, -1, :]
+
+            # 提取四元数（最后4维）: [batch_size, 4]
+            quaternion = imu_data[:, -4:]
+
+            # 转换为欧拉角
+            roll_rad, pitch_rad = self._quaternion_to_euler(quaternion)
+
+            # 转换为角度
+            roll_deg = torch.rad2deg(roll_rad)
+            pitch_deg = torch.rad2deg(pitch_rad)
+
+            # 组合为 [batch_size, 2]
+            tilt_angles_degrees = torch.stack([roll_deg, pitch_deg], dim=-1)
+        else:
+            # 降级方案：使用神经网络从关节状态推断倾斜（不准确但可用）
+            # [batch_size, 2] (roll, pitch)
+            tilt_angles = self.tilt_detector(last_output)
+            tilt_angles_degrees = tilt_angles * 45.0  # 缩放到±45度范围
 
         # 倾斜紧急检测
         tilt_emergency = torch.any(
@@ -189,7 +241,8 @@ class SafetyReflexLayer(BaseLayer):
             'balance_confidence': balance_confidence,
             'safety_status': self._compute_safety_status(emergency_score.squeeze(-1), tilt_angles_degrees),
             'action': balance_action,  # 提供统一的action接口
-            'layer': 'safety'
+            'layer': 'safety',
+            'imu_available': use_real_imu  # 标记是否使用了真实IMU数据
         }
 
     def _generate_safe_default_output(self, batch_size: int, device: torch.device) -> Dict[str, Any]:

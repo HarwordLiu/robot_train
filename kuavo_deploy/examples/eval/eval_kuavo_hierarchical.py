@@ -36,6 +36,7 @@ from lerobot.utils.random_utils import set_seed
 
 from configs.deploy.config_inference import load_inference_config
 from kuavo_deploy.utils.logging_utils import setup_logger
+from kuavo_deploy.utils.inference_logger import InferenceLogger
 
 log_model = setup_logger("model")
 log_robot = setup_logger("robot")
@@ -209,6 +210,8 @@ def main(config_path: str, env: gym.Env):
 
     # 加载配置
     cfg = load_inference_config(config_path)
+    from omegaconf import OmegaConf
+    full_cfg = OmegaConf.load(config_path)
 
     use_delta = cfg.use_delta
     eval_episodes = cfg.eval_episodes
@@ -227,11 +230,38 @@ def main(config_path: str, env: gym.Env):
     is_hierarchical = cfg.policy_type == 'hierarchical_diffusion'
     log_model.info(f"🔄 Hierarchical mode: {is_hierarchical}")
 
+    # 初始化推理日志记录器（如果配置启用）
+    enable_inference_logging = False
+    log_every_step = True
+    inference_log_dir = None
+
+    if is_hierarchical and hasattr(full_cfg, 'hierarchical'):
+        h_cfg = full_cfg.hierarchical
+        enable_inference_logging = h_cfg.get('enable_inference_logging', False)
+        if enable_inference_logging:
+            inference_log_dir = Path(h_cfg.get('inference_log_dir', 'outputs/inference_logs'))
+            inference_log_dir.mkdir(parents=True, exist_ok=True)
+            log_every_step = h_cfg.get('log_every_step', True)
+            log_model.info(f"📝 Inference logging enabled: {inference_log_dir}")
+            log_model.info(f"   Log every step: {log_every_step}")
+
     # 推理循环
     results = []
     for episode in range(eval_episodes):
 
         log_model.info(f"🎯 Episode {episode + 1}/{eval_episodes}")
+
+        # 创建episode日志记录器（如果启用）
+        episode_logger = None
+        if enable_inference_logging and inference_log_dir:
+            log_every_n = 1 if log_every_step else 10
+            episode_logger = InferenceLogger(
+                output_dir=inference_log_dir,
+                episode_idx=episode,
+                log_every_n_steps=log_every_n,
+                save_detailed_layers=True
+            )
+            log_model.info(f"📝 Episode {episode} logger created")
 
         # 重置环境和策略
         obs, info = env.reset()
@@ -293,10 +323,38 @@ def main(config_path: str, env: gym.Env):
 
                 # 记录性能
                 log_hierarchical_performance(hierarchical_info, episode_length)
+
+                # 记录到日志文件（如果启用）
+                if episode_logger:
+                    observation_shapes = {k: list(v.shape) for k, v in observation.items()}
+                    episode_logger.log_step(
+                        step=episode_length,
+                        action=action.cpu().numpy(),
+                        observation_shapes=observation_shapes,
+                        layer_outputs=hierarchical_info.get('layer_outputs', {}),
+                        inference_time=hierarchical_info.get('inference_time', 0) / 1000.0,  # 转为秒
+                        additional_info={
+                            'task_info': task_info,
+                            'within_budget': hierarchical_info.get('within_budget', True),
+                            'active_layers': hierarchical_info.get('active_layers', [])
+                        }
+                    )
             else:
                 # 传统推理
                 action = policy.select_action(observation)
                 hierarchical_info = {'mode': 'traditional'}
+
+                # 传统模式也可以记录（如果启用）
+                if episode_logger:
+                    observation_shapes = {k: list(v.shape) for k, v in observation.items()}
+                    episode_logger.log_step(
+                        step=episode_length,
+                        action=action.cpu().numpy() if hasattr(action, 'cpu') else action,
+                        observation_shapes=observation_shapes,
+                        layer_outputs=None,
+                        inference_time=0,
+                        additional_info={'mode': 'traditional'}
+                    )
 
             # 执行动作
             obs, reward, terminated, truncated, info = env.step(action.cpu().numpy())
@@ -308,6 +366,14 @@ def main(config_path: str, env: gym.Env):
             if terminated or truncated:
                 success = info.get('is_success', False)
                 break
+
+        # 保存episode日志总结（如果启用）
+        if episode_logger:
+            episode_logger.save_episode_summary(
+                success=success,
+                total_reward=episode_reward,
+                additional_stats=hierarchical_stats.copy() if is_hierarchical else None
+            )
 
         # 记录回合结果
         results.append({
@@ -357,6 +423,16 @@ def main(config_path: str, env: gym.Env):
                     all_activations[layer] = all_activations.get(layer, 0) + count
 
             log_model.info(f"   Layer usage: {all_activations}")
+
+    # 生成聚合推理报告（如果启用了日志记录）
+    if enable_inference_logging and inference_log_dir:
+        try:
+            InferenceLogger.create_aggregated_report(
+                output_dir=inference_log_dir,
+                task_name=f"{cfg.task}_{cfg.method}"
+            )
+        except Exception as e:
+            log_model.warning(f"Failed to create aggregated report: {e}")
 
     return results
 
