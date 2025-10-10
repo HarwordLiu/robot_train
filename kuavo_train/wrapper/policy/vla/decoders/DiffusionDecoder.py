@@ -94,7 +94,7 @@ class DiffusionDecoder(nn.Module):
         # 噪声调度器
         from lerobot.policies.diffusion.modeling_diffusion import _make_noise_scheduler
         self.noise_scheduler = _make_noise_scheduler(
-            noise_scheduler_type=noise_scheduler_type,
+            noise_scheduler_type,  # 第一个参数是位置参数
             num_train_timesteps=num_train_timesteps,
             beta_schedule=beta_schedule,
             beta_start=beta_start,
