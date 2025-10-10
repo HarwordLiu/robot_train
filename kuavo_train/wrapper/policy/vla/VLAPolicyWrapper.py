@@ -186,8 +186,8 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
 
         Args:
             batch: 输入批次，包含:
-                - observation.images: [B, T, C, H, W] RGB图像
-                - observation.depth: [B, T, C, H, W] 深度图（可选）
+                - observation.image.{camera_name}: [B, T, C, H, W] 各相机RGB图像
+                - observation.depth.{camera_name}: [B, T, C, H, W] 各相机深度图（可选）
                 - observation.state: [B, T, state_dim] 状态
                 - action: [B, horizon, action_dim] 目标动作
 
@@ -195,28 +195,46 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
             loss: 标量tensor
             info: 额外信息字典（可为None）
         """
-        # 1. 归一化输入
+        # 1. 预处理图像：crop + resize（训练时随机crop）
+        if self.config.image_features:
+            batch = dict(batch)  # shallow copy
+            for key in self.config.image_features:
+                images = batch[key]
+                # 处理时间维度：取最后一帧
+                if len(images.shape) == 5:  # [B, T, C, H, W]
+                    images = images[:, -1]  # [B, C, H, W]
+                images = self._preprocess_images(images, random_crop=True, image_type="rgb")
+                batch[key] = images  # [B, C, 224, 224]
+
+        if self.config.use_depth and self.config.depth_features:
+            batch = dict(batch)
+            for key in self.config.depth_features:
+                depth = batch[key]
+                if len(depth.shape) == 5:
+                    depth = depth[:, -1]
+                depth = self._preprocess_images(depth, random_crop=True, image_type="depth")
+                batch[key] = depth
+
+        # 2. 归一化输入
         batch = self.normalize_inputs(batch)
         batch = self.normalize_targets(batch)
 
-        # 2. Token化所有输入
-        # Vision tokens
-        rgb_images = batch.get('observation.images')
-        depth_images = batch.get(
-            'observation.depth') if self.config.use_depth else None
+        # 3. Stack各相机图像
+        if self.config.image_features:
+            # Stack所有相机: [B, num_cameras, C, H, W]
+            rgb_images = torch.stack([batch[key] for key in self.config.image_features], dim=1)
+        else:
+            rgb_images = None
 
+        if self.config.use_depth and self.config.depth_features:
+            depth_images = torch.stack([batch[key] for key in self.config.depth_features], dim=1)
+        else:
+            depth_images = None
+
+        # 4. Token化所有输入
         if rgb_images is not None:
-            # 处理时间维度：取最后一帧
-            if len(rgb_images.shape) == 5:  # [B, T, C, H, W]
-                rgb_images = rgb_images[:, -1]  # 取最后一帧 [B, C, H, W]
-            if depth_images is not None and len(depth_images.shape) == 5:
-                depth_images = depth_images[:, -1]
-
-            # 预处理图像：crop + resize（训练时随机crop）
-            rgb_images = self._preprocess_images(rgb_images, random_crop=True, image_type="rgb")
-            if depth_images is not None:
-                depth_images = self._preprocess_images(depth_images, random_crop=True, image_type="depth")
-
+            # rgb_images: [B, num_cameras, C, H, W]
+            # VisionTokenizer会处理多相机输入
             vision_tokens = self.vision_tokenizer(rgb_images, depth_images)
         else:
             # 如果没有视觉输入，创建零tokens
@@ -255,30 +273,46 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
         推理forward：生成动作
 
         Args:
-            batch: 观测数据
+            batch: 观测数据，包含各相机的observation keys
 
         Returns:
             action: [B, action_dim] 下一步动作
         """
-        # 1. 归一化输入
+        # 1. 预处理图像：crop + resize（推理时中心crop）
+        if self.config.image_features:
+            batch = dict(batch)
+            for key in self.config.image_features:
+                images = batch[key]
+                if len(images.shape) == 5:  # [B, T, C, H, W]
+                    images = images[:, -1]  # [B, C, H, W]
+                images = self._preprocess_images(images, random_crop=False, image_type="rgb")
+                batch[key] = images
+
+        if self.config.use_depth and self.config.depth_features:
+            batch = dict(batch)
+            for key in self.config.depth_features:
+                depth = batch[key]
+                if len(depth.shape) == 5:
+                    depth = depth[:, -1]
+                depth = self._preprocess_images(depth, random_crop=False, image_type="depth")
+                batch[key] = depth
+
+        # 2. 归一化输入
         batch = self.normalize_inputs(batch)
 
-        # 2. Token化输入
-        rgb_images = batch.get('observation.images')
-        depth_images = batch.get(
-            'observation.depth') if self.config.use_depth else None
+        # 3. Stack各相机图像
+        if self.config.image_features:
+            rgb_images = torch.stack([batch[key] for key in self.config.image_features], dim=1)
+        else:
+            rgb_images = None
 
+        if self.config.use_depth and self.config.depth_features:
+            depth_images = torch.stack([batch[key] for key in self.config.depth_features], dim=1)
+        else:
+            depth_images = None
+
+        # 4. Token化输入
         if rgb_images is not None:
-            if len(rgb_images.shape) == 5:
-                rgb_images = rgb_images[:, -1]
-            if depth_images is not None and len(depth_images.shape) == 5:
-                depth_images = depth_images[:, -1]
-
-            # 预处理图像：crop + resize（推理时中心crop）
-            rgb_images = self._preprocess_images(rgb_images, random_crop=False, image_type="rgb")
-            if depth_images is not None:
-                depth_images = self._preprocess_images(depth_images, random_crop=False, image_type="depth")
-
             vision_tokens = self.vision_tokenizer(rgb_images, depth_images)
         else:
             batch_size = batch['observation.state'].shape[0]

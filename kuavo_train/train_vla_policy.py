@@ -341,6 +341,8 @@ def main(cfg: DictConfig):
             else:
                 scaled_loss.backward()
 
+            steps += 1  # 先增加步数计数器
+
             # 优化器更新
             if steps % cfg.training.accumulation_steps == 0:
                 if amp_enabled:
@@ -363,7 +365,6 @@ def main(cfg: DictConfig):
                     lr=f"{lr_scheduler.get_last_lr()[0]:.2e}"
                 )
 
-            steps += 1
             total_loss += scaled_loss.item()
 
         # Epoch结束统计
