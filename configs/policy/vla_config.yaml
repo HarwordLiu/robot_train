@@ -15,7 +15,7 @@ episodes_to_use:
   - 199 # 使用前200个episodes
 
 repoid: 'lerobot/${task}'
-root: '/mnt/e/robot/data/data/task1/lerobot/1-400/' # 任务1数据路径
+root: '/root/robot/data/task1/data/lerobot/1-400/' # 任务1数据路径
 
 # 训练配置
 training:
@@ -28,8 +28,8 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 32 # VLA可以使用较小的batch size
-  num_workers: 16
+  batch_size: 64 # VLA可以使用较小的batch size
+  num_workers: 25
   drop_last: False
 
   test_training_mode: False
