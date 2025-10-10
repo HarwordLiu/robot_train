@@ -42,6 +42,7 @@ from tqdm import tqdm
 
 from kuavo_train.wrapper.policy.diffusion.DiffusionPolicyWrapper import CustomDiffusionPolicyWrapper
 from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
+from kuavo_train.wrapper.policy.vla.VLAPolicyWrapper import VLAPolicyWrapper
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot.utils.random_utils import set_seed
 import datetime
@@ -114,7 +115,7 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
 
     Args:
         pretrained_path: Path to the checkpoint
-        policy_type: Type of policy ('diffusion', 'act', or 'hierarchical_diffusion')
+        policy_type: Type of policy ('diffusion', 'act', 'hierarchical_diffusion', or 'vla_transformer')
 
     Returns:
         Loaded policy model and device
@@ -137,9 +138,16 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
         # Print hierarchical architecture info if available
         if hasattr(policy, 'print_architecture_summary'):
             policy.print_architecture_summary()
+    elif policy_type == 'vla_transformer':
+        log_model.info("🤖 Loading VLA Transformer Policy...")
+        policy = VLAPolicyWrapper.from_pretrained(
+            Path(pretrained_path), strict=True)
+        # Log VLA specific info
+        log_model.info(f"📊 Token dim: {policy.config.token_embed_dim}")
+        log_model.info(f"📊 Transformer depth: {policy.config.transformer_depth}")
     else:
         raise ValueError(
-            f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion'")
+            f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion', 'vla_transformer'")
 
     policy.eval()
     policy.to(device)
