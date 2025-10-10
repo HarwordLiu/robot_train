@@ -131,34 +131,24 @@ class TaskSpecificTrainingManager:
                     if hasattr(curriculum_config, 'universal_stages'):
                         universal_stages = curriculum_config.universal_stages
 
-                        # 覆盖任务1的课程学习阶段
-                        default_stages[1] = {
-                            "stage1": {
-                                "name": "safety_reflex",
-                                "layers": ["safety"],
-                                "epochs": universal_stages.get("stage1", {}).get("epochs", 1)
-                            },
-                            "stage2": {
-                                "name": "basic_manipulation",
-                                "layers": ["safety", "manipulation"],
-                                "epochs": universal_stages.get("stage2", {}).get("epochs", 1)
-                            },
-                            "stage3": {
-                                "name": "manipulation_skills",
-                                "layers": ["safety", "gait", "manipulation"],
-                                "epochs": universal_stages.get("stage3", {}).get("epochs", 1)
-                            },
-                            "stage4": {
-                                "name": "integrated_planning",
-                                "layers": ["safety", "gait", "manipulation", "planning"],
-                                "epochs": universal_stages.get("stage4", {}).get("epochs", 1)
-                            }
-                        }
+                        # 完全覆盖任务1的课程学习阶段（包括name, layers, epochs）
+                        task1_stages = {}
+                        for stage_key in ['stage1', 'stage2', 'stage3', 'stage4', 'stage5']:
+                            if hasattr(universal_stages, stage_key):
+                                stage_cfg = getattr(universal_stages, stage_key)
+                                task1_stages[stage_key] = {
+                                    "name": stage_cfg.get("name", f"default_{stage_key}"),
+                                    "layers": list(stage_cfg.get("layers", ["safety"])),
+                                    "epochs": stage_cfg.get("epochs", 1)
+                                }
 
-                        print("📝 从配置文件读取课程学习epochs:")
-                        for stage_name, stage_config in default_stages[1].items():
-                            print(
-                                f"   {stage_name}: {stage_config['epochs']} epochs")
+                        # 只有当读取到有效配置时才覆盖
+                        if task1_stages:
+                            default_stages[1] = task1_stages
+                            print("✅ 从配置文件完整读取课程学习设置 (name, layers, epochs):")
+                            for stage_name, stage_config in default_stages[1].items():
+                                print(f"   {stage_name}: {stage_config['name']}")
+                                print(f"      layers={stage_config['layers']}, epochs={stage_config['epochs']}")
 
         except Exception as e:
             print(f"⚠️  读取配置文件epochs失败: {e}, 使用默认设置")

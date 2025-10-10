@@ -10,7 +10,7 @@ method: 'humanoid_hierarchical' # 自定义方法名称，区分分层架构
 timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
 episodes_to_use:
   - 0
-  - 199 # 限制使用的episodes数量，[start, end]格式
+  - 299 # 限制使用的episodes数量，[start, end]格式 (增加到300个episodes以匹配标准diffusion)
 
 repoid: 'lerobot/${task}'
 root: '/root/robot/data/data/task1/lerobot' # 你的本地转换好的lerobot数据的目录（任务一数据）
@@ -153,42 +153,42 @@ policy:
         priority: 4
         enabled: True
 
-    # 层权重配置
+    # 层权重配置 (修改为抓取任务优先)
     layer_weights:
-      safety: 2.0 # 安全层权重最高
-      gait: 1.5 # 步态层次之
-      manipulation: 1.0 # 操作层标准权重
-      planning: 0.8 # 规划层权重较低
+      safety: 1.0 # 降低安全层权重，避免过度保守行为
+      gait: 1.0 # 降低步态层权重
+      manipulation: 2.0 # 提高操作层权重 - 抓取任务的核心！
+      planning: 0.5 # 降低规划层权重
 
     # 任务特化配置
     task_specialization:
       enable: True
       modules: ['dynamic_grasping', 'weighing', 'placement', 'sorting']
 
-    # 课程学习配置 - 支持任务特定训练
+    # 课程学习配置 - 修改为manipulation优先策略
     curriculum_learning:
       enable: True
       # 传统通用课程学习（作为后备）
       universal_stages:
         stage1:
-          name: 'safety_only'
-          layers: ['safety']
-          epochs: 5
+          name: 'manipulation_first'
+          layers: ['manipulation']  # 先学抓取行为！
+          epochs: 8
           loss_threshold: 0.1
         stage2:
-          name: 'safety_gait'
-          layers: ['safety', 'gait']
-          epochs: 5
+          name: 'manipulation_safety'
+          layers: ['manipulation', 'safety']  # 在抓取基础上加安全约束
+          epochs: 7
           loss_threshold: 0.08
         stage3:
-          name: 'safety_gait_manipulation'
-          layers: ['safety', 'gait', 'manipulation']
+          name: 'manipulation_safety_gait'
+          layers: ['manipulation', 'safety', 'gait']  # 继续添加步态
           epochs: 5
           loss_threshold: 0.06
         stage4:
           name: 'full_hierarchy'
-          layers: ['safety', 'gait', 'manipulation', 'planning']
-          epochs: 5
+          layers: ['safety', 'gait', 'manipulation', 'planning']  # 最后全开
+          epochs: 10
           loss_threshold: 0.05
 
       # 任务特定训练模式
