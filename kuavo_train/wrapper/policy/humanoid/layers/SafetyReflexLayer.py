@@ -75,7 +75,8 @@ class SafetyReflexLayer(BaseLayer):
 
         # 安全阈值（可配置）
         self.emergency_threshold = config.get('emergency_threshold', 0.8)
-        self.tilt_threshold_degrees = config.get('tilt_threshold_degrees', 15.0)  # 15度倾斜阈值
+        self.tilt_threshold_degrees = config.get(
+            'tilt_threshold_degrees', 15.0)  # 15度倾斜阈值
 
     def should_activate(self, inputs: Dict[str, torch.Tensor], context: Optional[Dict[str, Any]] = None) -> bool:
         """安全层始终激活"""
@@ -119,7 +120,8 @@ class SafetyReflexLayer(BaseLayer):
             # [batch_size, seq_len, state_dim]
             batch_size, seq_len, state_dim = robot_state.shape
         else:
-            raise ValueError(f"Unexpected robot_state shape: {robot_state.shape}, expected 1D, 2D or 3D tensor")
+            raise ValueError(
+                f"Unexpected robot_state shape: {robot_state.shape}, expected 1D, 2D or 3D tensor")
 
         # 如果输入维度不匹配，进行适配
         if state_dim != self.input_dim:
@@ -129,7 +131,7 @@ class SafetyReflexLayer(BaseLayer):
             else:
                 # 用零填充
                 padding = torch.zeros(batch_size, seq_len, self.input_dim - state_dim,
-                                    device=robot_state.device, dtype=robot_state.dtype)
+                                      device=robot_state.device, dtype=robot_state.dtype)
                 robot_state = torch.cat([robot_state, padding], dim=-1)
 
         # 快速GRU处理
@@ -139,18 +141,22 @@ class SafetyReflexLayer(BaseLayer):
         last_output = gru_output[:, -1, :]  # [batch_size, hidden_size]
 
         # 紧急情况检测
-        emergency_score = self.emergency_detector(last_output)  # [batch_size, 1]
-        emergency = (emergency_score > self.emergency_threshold).squeeze(-1).float()  # [batch_size] 转为float避免Boolean tensor问题
+        emergency_score = self.emergency_detector(
+            last_output)  # [batch_size, 1]
+        # [batch_size] bool类型
+        emergency = (emergency_score > self.emergency_threshold).squeeze(-1)
 
         # 倾斜检测
-        tilt_angles = self.tilt_detector(last_output)  # [batch_size, 2] (roll, pitch)
+        # [batch_size, 2] (roll, pitch)
+        tilt_angles = self.tilt_detector(last_output)
         tilt_angles_degrees = tilt_angles * 45.0  # 缩放到±45度范围
 
         # 倾斜紧急检测
-        tilt_emergency = torch.any(torch.abs(tilt_angles_degrees) > self.tilt_threshold_degrees, dim=-1)
+        tilt_emergency = torch.any(
+            torch.abs(tilt_angles_degrees) > self.tilt_threshold_degrees, dim=-1)
 
-        # 综合紧急状态
-        overall_emergency = emergency | tilt_emergency
+        # 综合紧急状态（使用逻辑或运算，保持bool类型）
+        overall_emergency = torch.logical_or(emergency, tilt_emergency)
 
         # 生成控制输出
         if torch.any(overall_emergency):
@@ -182,7 +188,8 @@ class SafetyReflexLayer(BaseLayer):
         zero_action = torch.zeros(batch_size, self.output_dim, device=device)
 
         return {
-            'emergency': torch.ones(batch_size, dtype=torch.bool, device=device),  # 默认紧急状态
+            # 默认紧急状态
+            'emergency': torch.ones(batch_size, dtype=torch.bool, device=device),
             'emergency_score': torch.ones(batch_size, device=device),
             'balance_action': zero_action,
             'emergency_action': zero_action,

@@ -39,7 +39,11 @@ class ManipulationLayer(BaseLayer):
             # 默认配置：only_arm=true时的双臂+手爪配置
             self.state_dim = 16
 
-        self.input_projection = nn.Linear(self.visual_dim + self.state_dim, self.hidden_size)
+        self.input_projection = nn.Linear(
+            self.visual_dim + self.state_dim, self.hidden_size)
+
+        # 动态视觉投影层（用于适配不同数量的相机输入）
+        self._visual_projection = None
 
         # 主要的Transformer网络
         encoder_layer = nn.TransformerEncoderLayer(
@@ -49,13 +53,15 @@ class ManipulationLayer(BaseLayer):
             dropout=0.1,
             batch_first=True
         )
-        self.manipulation_transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
+        self.manipulation_transformer = nn.TransformerEncoder(
+            encoder_layer, num_layers=self.num_layers)
 
         # 约束满足模块
         self.constraint_solver = ConstraintSatisfactionModule(self.hidden_size)
 
         # 双臂协调模块
-        self.bimanual_coordinator = BimanualCoordinationModule(self.hidden_size, self.state_dim)
+        self.bimanual_coordinator = BimanualCoordinationModule(
+            self.hidden_size, self.state_dim)
 
         # 输出投影 - 动作维度应该与状态维度一致
         self.action_head = nn.Linear(self.hidden_size, self.state_dim)  # 动作输出
@@ -82,10 +88,12 @@ class ManipulationLayer(BaseLayer):
         manipulation_features = self.manipulation_transformer(features)
 
         # 约束满足
-        constraint_solution = self.constraint_solver(manipulation_features, context)
+        constraint_solution = self.constraint_solver(
+            manipulation_features, context)
 
         # 双臂协调
-        coordinated_actions = self.bimanual_coordinator(manipulation_features, context)
+        coordinated_actions = self.bimanual_coordinator(
+            manipulation_features, context)
 
         # 最终动作
         final_action = self.action_head(manipulation_features[:, -1, :])
@@ -107,28 +115,56 @@ class ManipulationLayer(BaseLayer):
             state_features = inputs['observation.state']
             # 处理维度：确保是3D tensor [batch_size, seq_len, state_dim]
             if len(state_features.shape) == 1:
-                state_features = state_features.unsqueeze(0).unsqueeze(0)  # [1, 1, state_dim]
+                state_features = state_features.unsqueeze(
+                    0).unsqueeze(0)  # [1, 1, state_dim]
             elif len(state_features.shape) == 2:
-                state_features = state_features.unsqueeze(1)  # [batch_size, 1, state_dim]
+                state_features = state_features.unsqueeze(
+                    1)  # [batch_size, 1, state_dim]
             features_list.append(state_features)
 
-        # 视觉特征（如果可用）
-        if 'observation.images' in inputs:
-            # 简化：直接使用均值池化
-            visual_features = inputs['observation.images']
-            if len(visual_features.shape) > 3:
-                visual_features = visual_features.mean(dim=(-2, -1))  # 全局平均池化
-            # 确保是3D tensor
-            if len(visual_features.shape) == 2:
-                visual_features = visual_features.unsqueeze(1)
-            features_list.append(visual_features)
+        # 视觉特征（如果可用）- 处理多相机输入
+        visual_features_list = []
+
+        # 查找所有图像和深度图的key
+        image_keys = [k for k in inputs.keys() if k.startswith(
+            'observation.images.') or k.startswith('observation.depth')]
+
+        if image_keys:
+            for key in image_keys:
+                img_feature = inputs[key]
+                # 对图像进行全局平均池化 [batch_size, channels, H, W] -> [batch_size, channels]
+                if len(img_feature.shape) == 4:
+                    img_feature = img_feature.mean(
+                        dim=(-2, -1))  # [batch_size, channels]
+                # 展平通道维度
+                if len(img_feature.shape) == 2:
+                    visual_features_list.append(img_feature)
+
+        # 如果有视觉特征，拼接所有相机的特征
+        if visual_features_list:
+            # 拼接所有相机特征 [batch_size, sum_of_channels]
+            combined_visual = torch.cat(visual_features_list, dim=-1)
+            # 投影到固定维度
+            actual_visual_dim = combined_visual.shape[-1]
+            if actual_visual_dim != self.visual_dim:
+                # 动态创建投影层（推理时）
+                if not hasattr(self, '_visual_projection') or self._visual_projection is None or \
+                   self._visual_projection.in_features != actual_visual_dim:
+                    self._visual_projection = nn.Linear(
+                        actual_visual_dim, self.visual_dim).to(combined_visual.device)
+                combined_visual = self._visual_projection(combined_visual)
+
+            # 确保是3D tensor [batch_size, seq_len, visual_dim]
+            if len(combined_visual.shape) == 2:
+                combined_visual = combined_visual.unsqueeze(1)
+            features_list.append(combined_visual)
         else:
-            # 如果没有视觉特征，需要用零填充以匹配预训练模型的输入维度
+            # 如果没有视觉特征，使用零填充
             if features_list:
                 batch_size, seq_len = features_list[0].shape[:2]
                 device = features_list[0].device
-                # 创建1280维的零视觉特征
-                zero_visual = torch.zeros(batch_size, seq_len, self.visual_dim, device=device)
+                zero_visual = torch.zeros(
+                    batch_size, seq_len, self.visual_dim, device=device)
                 features_list.append(zero_visual)
 
         if not features_list:
@@ -144,7 +180,8 @@ class ManipulationLayer(BaseLayer):
         batch_size = list(inputs.values())[0].size(0)
         device = list(inputs.values())[0].device
 
-        zero_features = torch.zeros(batch_size, 10, self.hidden_size, device=device)
+        zero_features = torch.zeros(
+            batch_size, 10, self.hidden_size, device=device)
         zero_action = torch.zeros(batch_size, self.state_dim, device=device)
 
         return {
