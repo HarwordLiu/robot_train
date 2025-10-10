@@ -63,7 +63,7 @@ training:
 policy_name: vla_transformer_fullbody
 
 policy:
-  _target_: kuavo_train.wrapper.policy.vla.VLAConfigWrapper.VLAConfigWrapper
+  _target_: kuavo_train.wrapper.policy.vla.VLAConfigWrapper
 
   # Token化配置
   patch_size: 16
