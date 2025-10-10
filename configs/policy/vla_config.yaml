@@ -1,0 +1,233 @@
+hydra: # Hydra 配置
+  run:
+    dir: ./outputs/train_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+task: 'task_vla_16dim'
+method: 'vla_transformer'
+timestamp: ${now:%Y%m%d_%H%M%S}
+
+# 使用的episodes范围
+episodes_to_use:
+  - 0
+  - 199 # 使用前200个episodes
+
+repoid: 'lerobot/${task}'
+root: '/root/robot/data/task1/data/lerobot/1-400/' # 任务1数据路径
+
+# 训练配置
+training:
+  output_directory: 'outputs/train/${task}/${method}'
+  seed: 42
+  max_epoch: 500
+  save_freq_epoch: 10
+  log_freq: 10
+  device: 'cuda'
+  accumulation_steps: 1
+  ema_power: 0.75
+
+  batch_size: 32 # VLA可以使用较小的batch size
+  num_workers: 16
+  drop_last: False
+
+  test_training_mode: False
+  test_training_epochs: 2
+  max_training_step: null
+  resume: False
+  resume_timestamp: null
+
+  # 优化器配置
+  scheduler_name: cosine
+  scheduler_warmup_steps: 500
+
+  # 数据增强配置
+  RGB_Augmenter:
+    enable: True
+    max_num_transforms: 1
+    random_order: True
+    tfs:
+      notransform:
+        weight: 2.0
+        type: 'Identity'
+        kwargs: {}
+      brightness:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'brightness': [0.5, 1.5] }
+      contrast:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'contrast': [0.5, 1.5] }
+
+policy_name: vla_transformer
+
+policy:
+  _target_: kuavo_train.wrapper.policy.vla.VLAConfigWrapper.VLAConfigWrapper
+
+  # ==================== Token化配置 ====================
+  patch_size: 16 # Vision patch大小 (16x16)
+  token_embed_dim: 512 # 统一token维度
+  image_size: 224 # 输入图像尺寸
+
+  # ==================== Transformer Encoder配置 ====================
+  transformer_depth: 8 # Encoder层数
+  transformer_heads: 8 # 注意力头数
+  transformer_dim_feedforward: 2048 # FFN维度
+  transformer_dropout: 0.1
+
+  # ==================== Diffusion Decoder配置 ====================
+  num_denoiser_layers: 4 # Decoder层数
+  denoiser_heads: 8
+  denoiser_dim_feedforward: 2048
+
+  # ==================== Diffusion参数 ====================
+  horizon: 16 # 动作序列长度
+  n_action_steps: 8 # 每次执行的动作步数
+  n_obs_steps: 1 # 观测步数
+  drop_n_last_frames: 7
+
+  num_train_timesteps: 100
+  num_inference_steps: 50
+  noise_scheduler_type: DDPM
+  beta_schedule: squaredcos_cap_v2
+  beta_start: 0.0001
+  beta_end: 0.02
+  prediction_type: epsilon
+  clip_sample: true
+  clip_sample_range: 1.0
+  do_mask_loss_for_padding: false
+
+  # ==================== 优化器配置 ====================
+  optimizer_lr: 0.0001
+  optimizer_betas:
+    - 0.95
+    - 0.999
+  optimizer_eps: 1.0e-08
+  optimizer_weight_decay: 1.0e-03
+
+  # ==================== 归一化配置 ====================
+  normalization_mapping:
+    RGB:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+    DEPTH:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MIN_MAX
+    STATE:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MIN_MAX
+    ACTION:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MIN_MAX
+
+  # ==================== State配置（核心：详细定义每个关节）====================
+  state_config:
+    joints:
+      # 左臂（7自由度）
+      - idx: 0
+        type: 'shoulder'
+        side: 0 # 0=left
+        id: 0
+        name: 'left_shoulder_pitch'
+
+      - idx: 1
+        type: 'shoulder'
+        side: 0
+        id: 1
+        name: 'left_shoulder_roll'
+
+      - idx: 2
+        type: 'shoulder'
+        side: 0
+        id: 2
+        name: 'left_shoulder_yaw'
+
+      - idx: 3
+        type: 'elbow'
+        side: 0
+        id: 3
+        name: 'left_elbow_pitch'
+
+      - idx: 4
+        type: 'wrist'
+        side: 0
+        id: 4
+        name: 'left_wrist_yaw'
+
+      - idx: 5
+        type: 'wrist'
+        side: 0
+        id: 5
+        name: 'left_wrist_pitch'
+
+      - idx: 6
+        type: 'wrist'
+        side: 0
+        id: 6
+        name: 'left_wrist_roll'
+
+      # 左手爪（1自由度）
+      - idx: 7
+        type: 'gripper'
+        side: 0
+        id: 7
+        name: 'left_gripper'
+
+      # 右臂（7自由度）
+      - idx: 8
+        type: 'shoulder'
+        side: 1 # 1=right
+        id: 8
+        name: 'right_shoulder_pitch'
+
+      - idx: 9
+        type: 'shoulder'
+        side: 1
+        id: 9
+        name: 'right_shoulder_roll'
+
+      - idx: 10
+        type: 'shoulder'
+        side: 1
+        id: 10
+        name: 'right_shoulder_yaw'
+
+      - idx: 11
+        type: 'elbow'
+        side: 1
+        id: 11
+        name: 'right_elbow_pitch'
+
+      - idx: 12
+        type: 'wrist'
+        side: 1
+        id: 12
+        name: 'right_wrist_yaw'
+
+      - idx: 13
+        type: 'wrist'
+        side: 1
+        id: 13
+        name: 'right_wrist_pitch'
+
+      - idx: 14
+        type: 'wrist'
+        side: 1
+        id: 14
+        name: 'right_wrist_roll'
+
+      # 右手爪（1自由度）
+      - idx: 15
+        type: 'gripper'
+        side: 1
+        id: 15
+        name: 'right_gripper'
+
+  # ==================== 图像配置 ====================
+  use_depth: True
+  crop_is_random: True
+  crop_shape: [420, 560]
+  resize_shape: [210, 280]
+  use_amp: True
