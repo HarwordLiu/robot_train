@@ -46,23 +46,23 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
         # 不调用CustomDiffusionPolicyWrapper的__init__，因为架构完全不同
         # 直接初始化nn.Module
         nn.Module.__init__(self)
-        
+
         self.config = config
-        
+
         # 构建归一化器（使用lerobot的Normalize类）
         self.normalize_inputs = Normalize(
-            config.input_features, 
-            config.normalization_mapping, 
+            config.input_features,
+            config.normalization_mapping,
             dataset_stats
         )
         self.normalize_targets = Normalize(
-            config.output_features, 
-            config.normalization_mapping, 
+            config.output_features,
+            config.normalization_mapping,
             dataset_stats
         )
         self.unnormalize_outputs = Unnormalize(
-            config.output_features, 
-            config.normalization_mapping, 
+            config.output_features,
+            config.normalization_mapping,
             dataset_stats
         )
 
@@ -133,7 +133,7 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
         self.reset()
 
         print(f"✅ VLA Transformer Policy initialized successfully")
-    
+
     def reset(self):
         """重置观测和动作队列"""
         self._queues = {

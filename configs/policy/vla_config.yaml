@@ -15,7 +15,7 @@ episodes_to_use:
   - 199 # 使用前200个episodes
 
 repoid: 'lerobot/${task}'
-root: '/root/robot/data/task1/data/lerobot/1-400/' # 任务1数据路径
+root: '/mnt/e/robot/data/data/task1/lerobot/1-400/' # 任务1数据路径
 
 # 训练配置
 training:
