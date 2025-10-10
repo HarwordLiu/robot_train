@@ -39,6 +39,7 @@ import torch
 from tqdm import tqdm
 
 from kuavo_train.wrapper.policy.diffusion.DiffusionPolicyWrapper import CustomDiffusionPolicyWrapper
+from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot.utils.random_utils import set_seed
 import datetime
@@ -102,26 +103,32 @@ def depth_preprocess(depth, device="cpu"):
 def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     """
     Set up and load the policy model.
-    
+
     Args:
         pretrained_path: Path to the checkpoint
-        policy_type: Type of policy ('diffusion' or 'act')
-        
+        policy_type: Type of policy ('diffusion', 'act', or 'hierarchical_diffusion')
+
     Returns:
         Loaded policy model and device
     """
-    
+
     if device.type == 'cpu':
         log_model.warning("Warning: Using CPU for inference, this may be slow.")
-        time.sleep(3)  
-    
+        time.sleep(3)
+
     if policy_type == 'diffusion':
         policy = CustomDiffusionPolicyWrapper.from_pretrained(Path(pretrained_path),strict=True)
     elif policy_type == 'act':
         policy = ACTPolicy.from_pretrained(Path(pretrained_path),strict=True)
+    elif policy_type == 'hierarchical_diffusion':
+        log_model.info("🤖 Loading Hierarchical Diffusion Policy...")
+        policy = HumanoidDiffusionPolicy.from_pretrained(Path(pretrained_path), strict=True)
+        # Print hierarchical architecture info if available
+        if hasattr(policy, 'print_architecture_summary'):
+            policy.print_architecture_summary()
     else:
-        raise ValueError(f"Unsupported policy type: {policy_type}")
-    
+        raise ValueError(f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion'")
+
     policy.eval()
     policy.to(device)
     policy.reset()
@@ -129,7 +136,7 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     log_model.info(f"Model loaded from {pretrained_path}")
     log_model.info(f"Model n_obs_steps: {policy.config.n_obs_steps}")
     log_model.info(f"Model device: {device}")
-    
+
     return policy
 
 success_evt = threading.Event()
