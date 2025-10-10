@@ -21,6 +21,7 @@ class Config_Inference:
     max_episode_steps: int
     env_name: str
     depth_range: List[int] = None  # Depth range for depth images, in mm
+    target_image_size: Tuple[int, int] = None  # Target image size for model input (H, W)
 
 def load_inference_config(config_path: str = None) -> Config_Inference:
     """Load configuration from YAML file.
@@ -53,7 +54,8 @@ def load_inference_config(config_path: str = None) -> Config_Inference:
         epoch=config_dict['epoch'],
         max_episode_steps=config_dict['max_episode_steps'],
         env_name=config_dict['env_name'],
-        depth_range=config_dict.get('depth_range', (0, 1000))  # Optional field
+        depth_range=config_dict.get('depth_range', (0, 1000)),  # Optional field
+        target_image_size=tuple(config_dict['target_image_size']) if 'target_image_size' in config_dict else None  # Optional field
     )
 
 if __name__ == "__main__":

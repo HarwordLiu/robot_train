@@ -39,6 +39,7 @@ import imageio
 import numpy
 import torch
 from tqdm import tqdm
+import cv2
 
 from kuavo_train.wrapper.policy.diffusion.DiffusionPolicyWrapper import CustomDiffusionPolicyWrapper
 from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
@@ -101,11 +102,42 @@ def check_control_signals():
     return True  # 正常继续
 
 
-def img_preprocess(image, device="cpu"):
+def img_preprocess(image, device="cpu", target_size=None):
+    """
+    预处理RGB图像
+    
+    Args:
+        image: numpy array, shape (H, W, 3)
+        device: torch device
+        target_size: tuple (height, width), 如果提供则resize到目标尺寸
+    
+    Returns:
+        torch tensor, shape (1, 3, H, W)
+    """
+    if target_size is not None and (image.shape[0] != target_size[0] or image.shape[1] != target_size[1]):
+        # Resize using cv2 (H, W, C) -> (target_H, target_W, C)
+        image = cv2.resize(image, (target_size[1], target_size[0]), interpolation=cv2.INTER_LINEAR)
     return to_tensor(image).unsqueeze(0).to(device, non_blocking=True)
 
 
-def depth_preprocess(depth, device="cpu"):
+def depth_preprocess(depth, device="cpu", target_size=None):
+    """
+    预处理深度图像
+    
+    Args:
+        depth: numpy array, shape (1, H, W)
+        device: torch device
+        target_size: tuple (height, width), 如果提供则resize到目标尺寸
+    
+    Returns:
+        torch tensor, shape (1, 1, H, W)
+    """
+    if target_size is not None and depth.shape[0] == 1:
+        # Depth is (1, H, W), extract (H, W) for resize
+        depth_2d = depth[0]
+        if depth_2d.shape[0] != target_size[0] or depth_2d.shape[1] != target_size[1]:
+            depth_2d = cv2.resize(depth_2d, (target_size[1], target_size[0]), interpolation=cv2.INTER_NEAREST)
+        depth = depth_2d[numpy.newaxis, ...]  # Add back channel dimension
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
 
 
@@ -247,6 +279,14 @@ def main(config_path: str, episode: int):
     timestamp = cfg.timestamp
     epoch = cfg.epoch
     env_name = cfg.env_name
+    
+    # 获取目标图像尺寸（用于模型输入）
+    target_image_size = None
+    if hasattr(cfg, 'target_image_size') and cfg.target_image_size is not None:
+        target_image_size = tuple(cfg.target_image_size)
+        log_model.info(f"🖼️  目标图像尺寸（模型输入）: {target_image_size}")
+    else:
+        log_model.info("⚠️  未配置 target_image_size，使用环境原始图像尺寸")
 
     pretrained_path = Path(
         f"outputs/train/{task}/{method}/{timestamp}/epoch{epoch}")
@@ -351,14 +391,14 @@ def main(config_path: str, episode: int):
 
         for k, v in numpy_observation.items():
             if "images" in k:
-                observation[k] = img_preprocess(v, device=device)
+                observation[k] = img_preprocess(v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
             elif "state" in k:
                 observation[k] = torch.from_numpy(v).float().unsqueeze(
                     0).to(device, non_blocking=True)
                 observation_shapes[k] = observation[k].shape
             elif "depth" in k:
-                observation[k] = depth_preprocess(v, device=device)
+                observation[k] = depth_preprocess(v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
 
         with torch.inference_mode():

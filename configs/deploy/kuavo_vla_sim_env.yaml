@@ -18,7 +18,8 @@ head_init: [0, 0.209] # 机器人头部初始位置
 input_images:
   ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
 depth_range: [0, 1000] # 深度图的裁剪范围，单位：毫米
-image_size: [224, 224] # VLA使用正方形图像（会自动crop+resize）
+image_size: [480, 640] # ROS话题原始图像尺寸（会在推理侧resize到模型需要的224x224）
+target_image_size: [224, 224] # VLA模型需要的图像尺寸
 ros_rate: 10 # 推理频率，单位Hz
 
 # 以下环境配置为不建议改动配置
