@@ -29,7 +29,7 @@ training:
   ema_power: 0.75
 
   batch_size: 32 # VLA可以使用较小的batch size
-  num_workers: 24
+  num_workers: 16
   drop_last: False
 
   test_training_mode: False
@@ -226,7 +226,10 @@ policy:
         name: 'right_gripper'
 
   # ==================== 图像处理配置 ====================
-  crop_shape: [224, 224] # 裁剪尺寸（正方形，匹配image_size）
-  crop_is_random: True # 训练时使用随机裁剪
+  # 原始图像尺寸: 480x640 (H x W)
+  crop_shape: [448, 448] # 裁剪尺寸（正方形），从原图中心crop 448x448
+  crop_is_random: True # 训练时使用随机裁剪，推理时中心裁剪
+  # 裁剪后resize到image_size (224x224)，送入VisionTokenizer
+  # Patch数量: 224/16 = 14，总共14x14=196个patches
   use_depth: True # 使用深度图像
   use_amp: True # 使用混合精度训练

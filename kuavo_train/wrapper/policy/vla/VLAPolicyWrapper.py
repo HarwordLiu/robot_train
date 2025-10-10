@@ -16,6 +16,9 @@ from .decoders.DiffusionDecoder import DiffusionDecoder
 # 导入归一化工具
 from lerobot.policies.normalize import Normalize, Unnormalize
 
+# 导入图像处理工具
+from kuavo_train.utils.augmenter import crop_image, resize_image
+
 
 class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
     """
@@ -70,6 +73,10 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
         self.joint_configs = config.state_config.get('joints', [])
         if not self.joint_configs:
             raise ValueError("state_config must contain 'joints' list")
+
+        # 图像预处理配置
+        self.crop_shape = getattr(config, 'crop_shape', None)
+        self.crop_is_random = getattr(config, 'crop_is_random', True)
 
         # 获取动作维度
         if hasattr(config, 'output_features') and 'action' in config.output_features:
@@ -134,6 +141,32 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
 
         print(f"✅ VLA Transformer Policy initialized successfully")
 
+    def _preprocess_images(self, images: torch.Tensor, random_crop: bool = True, image_type: str = "rgb") -> torch.Tensor:
+        """
+        预处理图像：crop + resize到VisionTokenizer期望的尺寸
+
+        Args:
+            images: [B, C, H, W] 输入图像
+            random_crop: 是否随机裁剪（训练时True，推理时False）
+            image_type: 图像类型 ("rgb" 或 "depth")
+
+        Returns:
+            processed_images: [B, C, image_size, image_size] 处理后的图像
+        """
+        if self.crop_shape is not None:
+            # 1. Crop到crop_shape
+            images, _ = crop_image(
+                images,
+                target_range=self.crop_shape,
+                random_crop=(random_crop and self.crop_is_random)
+            )
+
+        # 2. Resize到VisionTokenizer期望的image_size
+        target_size = [self.config.image_size, self.config.image_size]
+        images = resize_image(images, target_size=target_size, image_type=image_type)
+
+        return images
+
     def reset(self):
         """重置观测和动作队列"""
         self._queues = {
@@ -173,11 +206,16 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
             'observation.depth') if self.config.use_depth else None
 
         if rgb_images is not None:
-            # 处理时间维度：取最后一帧或平均
+            # 处理时间维度：取最后一帧
             if len(rgb_images.shape) == 5:  # [B, T, C, H, W]
                 rgb_images = rgb_images[:, -1]  # 取最后一帧 [B, C, H, W]
             if depth_images is not None and len(depth_images.shape) == 5:
                 depth_images = depth_images[:, -1]
+
+            # 预处理图像：crop + resize（训练时随机crop）
+            rgb_images = self._preprocess_images(rgb_images, random_crop=True, image_type="rgb")
+            if depth_images is not None:
+                depth_images = self._preprocess_images(depth_images, random_crop=True, image_type="depth")
 
             vision_tokens = self.vision_tokenizer(rgb_images, depth_images)
         else:
@@ -235,6 +273,11 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
                 rgb_images = rgb_images[:, -1]
             if depth_images is not None and len(depth_images.shape) == 5:
                 depth_images = depth_images[:, -1]
+
+            # 预处理图像：crop + resize（推理时中心crop）
+            rgb_images = self._preprocess_images(rgb_images, random_crop=False, image_type="rgb")
+            if depth_images is not None:
+                depth_images = self._preprocess_images(depth_images, random_crop=False, image_type="depth")
 
             vision_tokens = self.vision_tokenizer(rgb_images, depth_images)
         else:
