@@ -159,13 +159,22 @@ class SafetyReflexLayer(BaseLayer):
         overall_emergency = torch.logical_or(emergency, tilt_emergency)
 
         # 生成控制输出
-        if torch.any(overall_emergency):
-            # 紧急情况：生成紧急动作
-            emergency_action = self.emergency_action_generator(last_output)
-            balance_action = emergency_action  # 使用紧急动作
-        else:
-            # 正常情况：生成平衡控制
-            balance_action = self.balance_controller(last_output)
+        # 为所有样本同时生成紧急动作和平衡控制动作
+        emergency_action = self.emergency_action_generator(last_output)
+        balance_action_normal = self.balance_controller(last_output)
+
+        # 根据每个样本的紧急状态选择相应的动作
+        # overall_emergency: [batch_size] bool
+        # 需要扩展维度以进行广播
+        # [batch_size, 1]
+        overall_emergency_expanded = overall_emergency.unsqueeze(-1)
+
+        # 使用torch.where：如果紧急则用emergency_action，否则用balance_action_normal
+        balance_action = torch.where(
+            overall_emergency_expanded,
+            emergency_action,
+            balance_action_normal
+        )  # [batch_size, action_dim]
 
         # 计算平衡置信度（倾斜越小，置信度越高）
         max_tilt = torch.max(torch.abs(tilt_angles_degrees), dim=-1)[0]
