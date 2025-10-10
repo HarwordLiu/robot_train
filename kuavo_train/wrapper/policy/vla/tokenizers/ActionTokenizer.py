@@ -34,16 +34,14 @@ class ActionTokenizer(nn.Module):
         self.embed_dim = embed_dim
 
         # 编码器：动作 → tokens（训练时使用）
-        # 为每个时间步创建独立的编码器
-        self.action_encoders = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(action_dim, embed_dim),
-                nn.LayerNorm(embed_dim),
-                nn.ReLU(),
-                nn.Linear(embed_dim, embed_dim),
-                nn.LayerNorm(embed_dim)
-            ) for _ in range(horizon)
-        ])
+        # 所有时间步共享同一个编码器
+        self.action_encoder = nn.Sequential(
+            nn.Linear(action_dim, embed_dim),
+            nn.LayerNorm(embed_dim),
+            nn.ReLU(),
+            nn.Linear(embed_dim, embed_dim),
+            nn.LayerNorm(embed_dim)
+        )
 
         # 解码器：tokens → 动作（推理时使用）
         # 所有时间步共享解码器
@@ -75,24 +73,13 @@ class ActionTokenizer(nn.Module):
         assert horizon == self.horizon, f"Expected horizon {self.horizon}, got {horizon}"
         assert action_dim == self.action_dim, f"Expected action_dim {self.action_dim}, got {action_dim}"
 
-        tokens = []
+        # 使用共享编码器编码所有时间步
+        tokens = self.action_encoder(actions)  # [B, horizon, embed_dim]
 
-        for t in range(horizon):
-            # 提取第t步的动作 [B, action_dim]
-            action_t = actions[:, t, :]
-
-            # 使用第t个编码器编码
-            token_t = self.action_encoders[t](action_t)  # [B, embed_dim]
-
-            # 添加时间步embedding
-            time_embed = self.time_embedding(
-                torch.tensor([t], dtype=torch.long, device=device))
-            token_t = token_t + time_embed  # [B, embed_dim]
-
-            tokens.append(token_t)
-
-        # 堆叠为序列 [B, horizon, embed_dim]
-        tokens = torch.stack(tokens, dim=1)
+        # 添加时间步embedding（广播方式）
+        time_ids = torch.arange(horizon, device=device)  # [horizon]
+        time_embeds = self.time_embedding(time_ids)  # [horizon, embed_dim]
+        tokens = tokens + time_embeds.unsqueeze(0)  # [B, horizon, embed_dim] + [1, horizon, embed_dim]
 
         return tokens
 
@@ -158,15 +145,13 @@ class ActionTokenizer(nn.Module):
         self.action_decoder[-1] = new_final_layer
 
         # 2. 重新初始化编码器（因为输入维度变了）
-        self.action_encoders = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(new_action_dim, self.embed_dim),
-                nn.LayerNorm(self.embed_dim),
-                nn.ReLU(),
-                nn.Linear(self.embed_dim, self.embed_dim),
-                nn.LayerNorm(self.embed_dim)
-            ) for _ in range(self.horizon)
-        ])
+        self.action_encoder = nn.Sequential(
+            nn.Linear(new_action_dim, self.embed_dim),
+            nn.LayerNorm(self.embed_dim),
+            nn.ReLU(),
+            nn.Linear(self.embed_dim, self.embed_dim),
+            nn.LayerNorm(self.embed_dim)
+        )
 
         # 3. 可选：冻结解码器的旧权重
         if freeze_old_weights:

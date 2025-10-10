@@ -1,0 +1,71 @@
+hydra: # Hydra 配置文件保存目录
+  run:
+    dir: ./outputs/kuavo_vla_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/kuavo_vla_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+# env config，VLA策略仿真器运行配置文件
+real: false # 是否使用真实机器人，仿真环境为false
+
+only_arm: true # 默认true, 是否只使用手臂数据
+eef_type: rq2f85 # 末端执行器类型: 仿真选择：rq2f85, 真机可选：leju_claw, qiangnao
+control_mode: joint # or eef（暂未支持）
+which_arm: both # 需要哪一只手臂的数据，可选: left, right, both
+head_init: [0, 0.209] # 机器人头部初始位置
+
+# input_images：输入图像，与训练时保持一致
+input_images:
+  ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
+depth_range: [0, 1000] # 深度图的裁剪范围，单位：毫米
+image_size: [224, 224] # VLA使用正方形图像（会自动crop+resize）
+ros_rate: 10 # 推理频率，单位Hz
+
+# 以下环境配置为不建议改动配置
+qiangnao_dof_needed: 1
+leju_claw_dof_needed: 1
+rq2f85_dof_needed: 1
+
+arm_init: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # 手臂初始位置
+arm_min:
+  [
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+  ]
+arm_max: [180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180]
+
+eef_min: [0]
+eef_max: [1]
+
+is_binary: false
+
+# inference config，VLA模型推理配置
+go_bag_path: /your_bag_path # 推理时需要提供bag包的完整路径
+
+policy_type: 'vla_transformer' # VLA Transformer策略
+use_delta: false # 是否使用增量动作，default=false（暂未支持）
+eval_episodes: 50 # 测试回合数
+seed: 42 # 随机种子
+start_seed: 42 # 回合开始时的随机种子
+device: 'cuda' # or "cpu"
+
+# 模型路径配置 - 指向VLA训练输出
+task: 'task_vla_16dim'
+method: 'vla_transformer'
+timestamp: '20250101_000000' # 修改为你的训练时间戳
+epoch: 10 # 使用训练保存的哪一个epoch
+
+max_episode_steps: 500 # 最大回合步数
+env_name: Kuavo-Sim # kuavo VLA仿真器环境名称

@@ -263,8 +263,11 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
             num_inference_steps=num_inference_steps
         )
 
-        # 返回第一步动作
-        return actions[:, 0]
+        # 5. Unnormalize输出（重要！采样出来的动作是归一化后的值）
+        unnormalized_actions = self.unnormalize_outputs({'action': actions})['action']
+
+        # 6. 返回第一步动作
+        return unnormalized_actions[:, 0]
 
     def _save_pretrained(self, save_directory: Path) -> None:
         """保存模型"""

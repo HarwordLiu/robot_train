@@ -28,8 +28,8 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 64 # VLA可以使用较小的batch size
-  num_workers: 16
+  batch_size: 32 # VLA可以使用较小的batch size
+  num_workers: 24
   drop_last: False
 
   test_training_mode: False
@@ -69,7 +69,7 @@ policy:
   # ==================== Token化配置 ====================
   patch_size: 16 # Vision patch大小 (16x16)
   token_embed_dim: 512 # 统一token维度
-  image_size: 224 # 输入图像尺寸
+  image_size: 224 # 输入图像尺寸（正方形）
 
   # ==================== Transformer Encoder配置 ====================
   transformer_depth: 8 # Encoder层数
@@ -225,6 +225,8 @@ policy:
         id: 15
         name: 'right_gripper'
 
-  # ==================== 图像和训练配置 ====================
+  # ==================== 图像处理配置 ====================
+  crop_shape: [224, 224] # 裁剪尺寸（正方形，匹配image_size）
+  crop_is_random: True # 训练时使用随机裁剪
   use_depth: True # 使用深度图像
   use_amp: True # 使用混合精度训练
