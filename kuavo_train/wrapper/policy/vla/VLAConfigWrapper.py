@@ -39,6 +39,10 @@ class VLAConfigWrapper(CustomDiffusionConfigWrapper):
     use_depth: bool = True  # 是否使用深度图像
     use_amp: bool = True  # 是否使用混合精度训练（训练脚本使用）
 
+    # 架构配置（用于优化器选择）
+    use_unet: bool = False  # VLA使用Transformer，不使用UNet
+    use_transformer: bool = True  # VLA使用Transformer架构
+
     def __post_init__(self):
         """后初始化处理"""
         super().__post_init__()
