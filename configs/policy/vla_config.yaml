@@ -225,9 +225,6 @@ policy:
         id: 15
         name: 'right_gripper'
 
-  # ==================== 图像配置 ====================
-  use_depth: True
-  crop_is_random: True
-  crop_shape: [420, 560]
-  resize_shape: [210, 280]
-  use_amp: True
+  # ==================== 图像和训练配置 ====================
+  use_depth: True # 使用深度图像
+  use_amp: True # 使用混合精度训练

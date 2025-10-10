@@ -35,8 +35,9 @@ class VLAConfigWrapper(CustomDiffusionConfigWrapper):
     # State配置（核心）
     state_config: Dict[str, Any] = field(default_factory=dict)
 
-    # 是否使用深度图像
-    use_depth: bool = True
+    # 图像和训练配置
+    use_depth: bool = True  # 是否使用深度图像
+    use_amp: bool = True  # 是否使用混合精度训练（训练脚本使用）
 
     def __post_init__(self):
         """后初始化处理"""
