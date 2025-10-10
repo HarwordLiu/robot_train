@@ -63,10 +63,28 @@
 
 ---
 
-### 📊 其他文档
+### 📊 对比与参考
 
-#### [4. Diffusion训练分析](./diffusion_training_analysis.md)
+#### [4. Diffusion vs Hierarchical 深度对比](./diffusion_vs_hierarchical_comparison.md) ⭐推荐
+**帮助你理解两种架构的区别并做出选择**
+
+涵盖内容:
+- ✅ 架构对比 (可视化图表、组件差异)
+- ✅ 核心设计差异 (设计理念对比)
+- ✅ 训练/推理流程对比
+- ✅ 适用场景分析
+- ✅ 性能与复杂度对比
+- ✅ 如何选择 (决策树、渐进式策略)
+
+**适合人群**: 需要选择架构的研究者和工程师
+
+---
+
+#### [5. Diffusion训练分析](./diffusion_training_analysis.md)
 Diffusion模型训练的详细分析
+
+#### [6. Diffusion Policy 完整文档](./README_DIFFUSION.md)
+查看普通 Diffusion Policy 的完整文档
 
 ---
 
