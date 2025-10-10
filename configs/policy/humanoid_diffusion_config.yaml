@@ -13,7 +13,7 @@ episodes_to_use:
   - 299 # 限制使用的episodes数量，[start, end]格式 (增加到300个episodes以匹配标准diffusion)
 
 repoid: 'lerobot/${task}'
-root: '/root/robot/data/data/task1/lerobot' # 你的本地转换好的lerobot数据的目录（任务一数据）
+root: '/root/robot/data/task1/data/lerobot/1-400/' # 你的本地转换好的lerobot数据的目录（任务一数据）
 
 # 训练相关配置
 training:
@@ -172,22 +172,22 @@ policy:
       universal_stages:
         stage1:
           name: 'manipulation_first'
-          layers: ['manipulation']  # 先学抓取行为！
+          layers: ['manipulation'] # 先学抓取行为！
           epochs: 8
           loss_threshold: 0.1
         stage2:
           name: 'manipulation_safety'
-          layers: ['manipulation', 'safety']  # 在抓取基础上加安全约束
+          layers: ['manipulation', 'safety'] # 在抓取基础上加安全约束
           epochs: 7
           loss_threshold: 0.08
         stage3:
           name: 'manipulation_safety_gait'
-          layers: ['manipulation', 'safety', 'gait']  # 继续添加步态
+          layers: ['manipulation', 'safety', 'gait'] # 继续添加步态
           epochs: 5
           loss_threshold: 0.06
         stage4:
           name: 'full_hierarchy'
-          layers: ['safety', 'gait', 'manipulation', 'planning']  # 最后全开
+          layers: ['safety', 'gait', 'manipulation', 'planning'] # 最后全开
           epochs: 10
           loss_threshold: 0.05
 
