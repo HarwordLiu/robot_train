@@ -28,7 +28,7 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 32 # VLA可以使用较小的batch size
+  batch_size: 64 # VLA可以使用较小的batch size
   num_workers: 16
   drop_last: False
 
