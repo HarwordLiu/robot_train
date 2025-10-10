@@ -68,7 +68,7 @@ timestamp: 'task_specific_run_20251009_033145'
 epoch: 30 # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
 
 max_episode_steps: 500 # 最大回合步数，超过自动结束，根据任务所需时长调整
-env_name: Kuavo-Hierarchical-Sim # kuavo分层架构仿真器环境名称
+env_name: Kuavo-Sim # kuavo分层架构仿真器环境名称
 
 # 分层架构特有配置
 hierarchical:
