@@ -527,6 +527,13 @@ def main(cfg: DictConfig):
         device=device,
     )
 
+    # 🔧 强制设置正确的动作维度（Hydra可能会根据output_features覆盖这个值）
+    target_action_dim = cfg.training.target_action_dim
+    if policy_cfg.max_action_dim != target_action_dim:
+        print(
+            f"🔧 Overriding max_action_dim: {policy_cfg.max_action_dim} -> {target_action_dim}")
+        policy_cfg.max_action_dim = target_action_dim
+
     # Override learning rate from task config
     if hasattr(task_cfg.task.training, 'policy'):
         policy_cfg.optimizer_lr = task_cfg.task.training.policy.optimizer_lr
@@ -597,26 +604,6 @@ def main(cfg: DictConfig):
                     stats['std'] = new_std
                     print(
                         f"   Updated normalization stats for {key}: {old_mean.shape} -> {new_mean.shape}")
-
-        # 修复状态投影层维度不匹配问题
-        if hasattr(policy.model, 'state_proj'):
-            state_proj = policy.model.state_proj
-            if state_proj.weight.shape[1] == 16 and policy.config.max_action_dim == 32:
-                print("   Fixing state_proj layer dimensions...")
-                # 创建新的状态投影层
-                new_state_proj = torch.nn.Linear(
-                    state_proj.in_features, policy.config.max_action_dim)
-                # 复制原有权重（正确的维度）
-                new_state_proj.weight.data[:, :16] = state_proj.weight.data
-                new_state_proj.bias.data[:16] = state_proj.bias.data
-                # 随机初始化新增部分
-                torch.nn.init.normal_(
-                    new_state_proj.weight.data[:, 16:], 0, 0.01)
-                torch.nn.init.zeros_(new_state_proj.bias.data[16:])
-                # 替换层
-                policy.model.state_proj = new_state_proj
-                print(
-                    f"   Updated state_proj: {state_proj.weight.shape} -> {new_state_proj.weight.shape}")
 
     policy.train()
 
