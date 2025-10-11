@@ -816,15 +816,6 @@ def main(cfg: DictConfig):
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
                      for k, v in batch.items()}
 
-            # Debug: 打印batch中所有tensor的形状
-            if num_batches == 0:  # 只在第一个batch打印
-                print("\n🔍 Debug: Batch tensor shapes:")
-                for key, value in batch.items():
-                    if isinstance(value, torch.Tensor):
-                        print(f"   {key}: {value.shape}")
-                    elif isinstance(value, list):
-                        print(f"   {key}: list of {len(value)} items")
-
             # Forward
             loss, _ = policy.forward(batch)
 
