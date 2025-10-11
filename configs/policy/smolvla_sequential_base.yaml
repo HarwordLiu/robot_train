@@ -16,6 +16,9 @@ hydra:
 timestamp: ${now:%Y%m%d_%H%M%S}
 method: 'smolvla_sequential'
 
+# 任务配置字段（Hydra需要这个字段才能进行覆盖）
+task: tasks/task1_moving_grasp
+
 # ==================== SmolVLA策略配置 ====================
 policy_name: smolvla
 

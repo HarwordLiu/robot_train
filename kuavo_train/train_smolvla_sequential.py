@@ -434,8 +434,8 @@ def main(cfg: DictConfig):
     set_seed(cfg.training.seed)
 
     # 加载任务配置
-    # 从命令行参数获取任务名称
-    task_name = cfg.get('task', 'task1_moving_grasp')
+    # 从Hydra配置获取任务名称
+    task_name = cfg.get('task', 'tasks/task1_moving_grasp')
     if task_name.startswith('tasks/'):
         task_name = task_name.replace('tasks/', '')
 
