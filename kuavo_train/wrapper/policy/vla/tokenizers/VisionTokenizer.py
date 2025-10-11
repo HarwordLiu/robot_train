@@ -18,21 +18,30 @@ class VisionTokenizer(nn.Module):
     - 支持多相机输入
     """
 
-    def __init__(self, patch_size: int = 16, embed_dim: int = 512, image_size: int = 224):
+    def __init__(self, patch_size: int = 16, embed_dim: int = 512, image_size = 224, use_pretrained: bool = False):
         """
         Args:
             patch_size: Patch大小（正方形）
             embed_dim: Token embedding维度
-            image_size: 输入图像尺寸（假设正方形）
+            image_size: 输入图像尺寸（int表示正方形，tuple表示(H, W)）
+            use_pretrained: 是否使用预训练的patch embeddings
         """
         super().__init__()
 
         self.patch_size = patch_size
         self.embed_dim = embed_dim
-        self.image_size = image_size
+        self.use_pretrained = use_pretrained
 
-        # 计算patch数量
-        self.num_patches = (image_size // patch_size) ** 2
+        # 支持int和tuple两种格式
+        if isinstance(image_size, int):
+            self.image_size = (image_size, image_size)
+        else:
+            self.image_size = tuple(image_size)
+
+        # 计算patch数量（支持非正方形）
+        self.num_patches_h = self.image_size[0] // patch_size
+        self.num_patches_w = self.image_size[1] // patch_size
+        self.num_patches = self.num_patches_h * self.num_patches_w
 
         # RGB图像投影层：将3通道图像转为tokens
         self.rgb_projection = nn.Conv2d(
@@ -63,8 +72,12 @@ class VisionTokenizer(nn.Module):
         # LayerNorm
         self.norm = nn.LayerNorm(embed_dim)
 
+        # 加载预训练权重
+        if use_pretrained:
+            self._load_pretrained_weights()
+
         print(
-            f"✅ VisionTokenizer initialized: {self.num_patches} patches per image, {embed_dim}D tokens")
+            f"✅ VisionTokenizer initialized: {self.num_patches} patches ({self.num_patches_h}x{self.num_patches_w}), {embed_dim}D tokens, pretrained={use_pretrained}")
 
     def forward(self, rgb_images: torch.Tensor, depth_images: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -153,3 +166,23 @@ class VisionTokenizer(nn.Module):
     def get_num_tokens(self, num_rgb_cameras: int = 1, num_depth_cameras: int = 0) -> int:
         """计算总token数量"""
         return (num_rgb_cameras + num_depth_cameras) * self.num_patches
+
+    def _load_pretrained_weights(self):
+        """加载预训练的patch embedding权重"""
+        try:
+            # 尝试从utils导入预训练加载器
+            from ..utils.load_pretrained_patches import load_pretrained_patch_embedding
+
+            pretrained_weight = load_pretrained_patch_embedding(
+                patch_size=self.patch_size,
+                embed_dim=self.embed_dim
+            )
+
+            if pretrained_weight is not None:
+                self.rgb_projection.weight.data = pretrained_weight
+                print(f"✅ Loaded pretrained patch embedding weights")
+            else:
+                print(f"⚠️  Pretrained weights not available, using random initialization")
+        except Exception as e:
+            print(f"⚠️  Failed to load pretrained weights: {e}")
+            print(f"   Using random initialization instead")

@@ -94,7 +94,8 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
         self.vision_tokenizer = VisionTokenizer(
             patch_size=config.patch_size,
             embed_dim=config.token_embed_dim,
-            image_size=config.image_size
+            image_size=config.image_size,
+            use_pretrained=getattr(config, 'use_pretrained_patches', False)
         )
 
         self.state_tokenizer = StateTokenizer(
@@ -151,7 +152,7 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
             image_type: 图像类型 ("rgb" 或 "depth")
 
         Returns:
-            processed_images: [B, C, image_size, image_size] 处理后的图像
+            processed_images: [B, C, H, W] 处理后的图像（H, W由image_size决定）
         """
         if self.crop_shape is not None:
             # 1. Crop到crop_shape
@@ -162,7 +163,12 @@ class VLAPolicyWrapper(CustomDiffusionPolicyWrapper):
             )
 
         # 2. Resize到VisionTokenizer期望的image_size
-        target_size = [self.config.image_size, self.config.image_size]
+        # 支持int和tuple两种格式
+        if isinstance(self.config.image_size, (list, tuple)):
+            target_size = list(self.config.image_size)  # [H, W]
+        else:
+            target_size = [self.config.image_size, self.config.image_size]  # [H, H]
+
         images = resize_image(images, target_size=target_size, image_type=image_type)
 
         return images

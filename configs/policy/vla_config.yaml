@@ -12,7 +12,7 @@ timestamp: ${now:%Y%m%d_%H%M%S}
 # 使用的episodes范围
 episodes_to_use:
   - 0
-  - 399 # 使用前200个episodes
+  - 199 # 使用前200个episodes
 
 repoid: 'lerobot/${task}'
 root: '/root/robot/data/task1/data/lerobot/1-400/' # 任务1数据路径
@@ -28,7 +28,7 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 64 # VLA可以使用较小的batch size
+  batch_size: 96
   num_workers: 25
   drop_last: False
 
@@ -42,22 +42,22 @@ training:
   scheduler_name: cosine
   scheduler_warmup_steps: 500
 
-  # 数据增强配置
+  # 数据增强配置（增强正则化）
   RGB_Augmenter:
     enable: True
-    max_num_transforms: 1
+    max_num_transforms: 2 # 从1增加到2，增强数据增强
     random_order: True
     tfs:
       notransform:
-        weight: 2.0
+        weight: 1.0 # 从2.0降到1.0，减少不增强的比例
         type: 'Identity'
         kwargs: {}
       brightness:
-        weight: 1.0
+        weight: 1.5 # 从1.0增加到1.5
         type: 'ColorJitter'
         kwargs: { 'brightness': [0.5, 1.5] }
       contrast:
-        weight: 1.0
+        weight: 1.5 # 从1.0增加到1.5
         type: 'ColorJitter'
         kwargs: { 'contrast': [0.5, 1.5] }
 
@@ -67,25 +67,25 @@ policy:
   _target_: kuavo_train.wrapper.policy.vla.VLAConfigWrapper
 
   # ==================== Token化配置 ====================
-  patch_size: 16 # Vision patch大小 (16x16)
-  token_embed_dim: 512 # 统一token维度
-  image_size: 224 # 输入图像尺寸（正方形）
+  patch_size: 32 # Vision patch大小 (32x32) - 从16增大到32减少token数量
+  token_embed_dim: 256 # 统一token维度 - 从512降到256减少计算量
+  image_size: [192, 256] # 输入图像尺寸（非正方形，保持3:4宽高比）
 
   # ==================== Transformer Encoder配置 ====================
-  transformer_depth: 8 # Encoder层数
+  transformer_depth: 6 # Encoder层数 - 从8降到6减少参数量
   transformer_heads: 8 # 注意力头数
-  transformer_dim_feedforward: 2048 # FFN维度
-  transformer_dropout: 0.1
+  transformer_dim_feedforward: 1024 # FFN维度 - 从2048降到1024
+  transformer_dropout: 0.25 # 从0.1增加到0.25防止过拟合
 
   # ==================== Diffusion Decoder配置 ====================
-  num_denoiser_layers: 4 # Decoder层数
+  num_denoiser_layers: 3 # Decoder层数 - 从4降到3
   denoiser_heads: 8
-  denoiser_dim_feedforward: 2048
+  denoiser_dim_feedforward: 1024 # 从2048降到1024
 
   # ==================== Diffusion参数 ====================
   horizon: 16 # 动作序列长度
   n_action_steps: 8 # 每次执行的动作步数
-  n_obs_steps: 2 # 观测步数
+  n_obs_steps: 1 # 观测步数 - 从2降到1降低时序复杂度
   drop_n_last_frames: 7
 
   num_train_timesteps: 100
@@ -227,9 +227,10 @@ policy:
 
   # ==================== 图像处理配置 ====================
   # 原始图像尺寸: 480x640 (H x W)
-  crop_shape: [448, 448] # 裁剪尺寸（正方形），从原图中心crop 448x448
+  crop_shape: [420, 560] # 裁剪尺寸（保持3:4宽高比）- 从[448,448]改为[420,560]
   crop_is_random: True # 训练时使用随机裁剪，推理时中心裁剪
-  # 裁剪后resize到image_size (224x224)，送入VisionTokenizer
-  # Patch数量: 224/16 = 14，总共14x14=196个patches
+  # 裁剪后resize到image_size [192,256]，送入VisionTokenizer
+  # Patch数量: (192/32) x (256/32) = 6x8 = 48个patches（原来196个）
   use_depth: True # 使用深度图像
   use_amp: True # 使用混合精度训练
+  use_pretrained_patches: True # 使用预训练的patch embeddings（DINO）

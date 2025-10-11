@@ -345,10 +345,14 @@ def main(cfg: DictConfig):
 
             # 优化器更新
             if steps % cfg.training.accumulation_steps == 0:
+                # 梯度裁剪（防止梯度爆炸）
                 if amp_enabled:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
+                    torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)
                     optimizer.step()
                 optimizer.zero_grad()
                 lr_scheduler.step()
