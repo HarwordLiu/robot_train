@@ -251,4 +251,5 @@ zipp==3.23.0
 kuavo_humanoid_sdk
 pympler
 matplotlib
+transformers>=4.50.3,<4.52.0
 -e .
