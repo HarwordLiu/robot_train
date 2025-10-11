@@ -12,7 +12,7 @@ timestamp: ${now:%Y%m%d_%H%M%S}
 # 使用的episodes范围
 episodes_to_use:
   - 0
-  - 199 # 使用前200个episodes
+  - 199 # 使用400个episodes（与diffusion对齐）
 
 repoid: 'lerobot/${task}'
 root: '/root/robot/data/task1/data/lerobot/1-400/' # 任务1数据路径
@@ -28,8 +28,8 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 128
-  num_workers: 22
+  batch_size: 64
+  num_workers: 25
   drop_last: False
 
   test_training_mode: False
@@ -40,7 +40,7 @@ training:
 
   # 优化器配置
   scheduler_name: cosine
-  scheduler_warmup_steps: 500
+  scheduler_warmup_steps: 1000 # 增加warmup（从500→1000），预训练权重需要更平滑的启动
 
   # 数据增强配置（增强正则化）
   RGB_Augmenter:
@@ -75,7 +75,7 @@ policy:
   transformer_depth: 6 # Encoder层数 - 从8降到6减少参数量
   transformer_heads: 8 # 注意力头数
   transformer_dim_feedforward: 1024 # FFN维度 - 从2048降到1024
-  transformer_dropout: 0.25 # 从0.1增加到0.25防止过拟合
+  transformer_dropout: 0.1 # 降回0.1，0.25对小模型太强了
 
   # ==================== Diffusion Decoder配置 ====================
   num_denoiser_layers: 3 # Decoder层数 - 从4降到3
@@ -100,12 +100,12 @@ policy:
   do_mask_loss_for_padding: false
 
   # ==================== 优化器配置 ====================
-  optimizer_lr: 0.0001
+  optimizer_lr: 0.0002 # 增加学习率（从0.0001→0.0002），匹配更大batch size
   optimizer_betas:
     - 0.95
     - 0.999
   optimizer_eps: 1.0e-08
-  optimizer_weight_decay: 1.0e-03
+  optimizer_weight_decay: 1.0e-06 # 降低weight decay（从1e-3→1e-6），小模型不需要太强正则
 
   # ==================== 归一化配置 ====================
   normalization_mapping:
