@@ -564,11 +564,19 @@ def main(cfg: DictConfig):
                     old_mean = stats['mean']
                     old_std = stats['std']
 
+                    # 转换为torch张量（如果是numpy数组）
+                    if hasattr(old_mean, 'numpy'):  # 已经是torch张量
+                        old_mean_tensor = old_mean
+                        old_std_tensor = old_std
+                    else:  # numpy数组
+                        old_mean_tensor = torch.from_numpy(old_mean)
+                        old_std_tensor = torch.from_numpy(old_std)
+
                     # 用0填充均值和标准差
                     new_mean = torch.cat(
-                        [old_mean, torch.zeros(policy.config.max_action_dim - 16)])
+                        [old_mean_tensor, torch.zeros(policy.config.max_action_dim - 16)])
                     new_std = torch.cat(
-                        [old_std, torch.ones(policy.config.max_action_dim - 16)])
+                        [old_std_tensor, torch.ones(policy.config.max_action_dim - 16)])
 
                     stats['mean'] = new_mean
                     stats['std'] = new_std
