@@ -247,8 +247,7 @@ def create_mixed_dataloader(
             cfg.training.batch_size,
             cfg.training.num_workers,
             pin_memory=(cfg.training.device != 'cpu'),
-            drop_last=cfg.training.drop_last,
-            target_action_dim=cfg.training.target_action_dim
+            drop_last=cfg.training.drop_last
         )
 
     # 混合replay数据
@@ -384,8 +383,7 @@ def validate_all_tasks(
             batch_size=cfg.training.batch_size,
             num_workers=cfg.training.num_workers // 2,
             pin_memory=(device.type != 'cpu'),
-            drop_last=False,
-            target_action_dim=cfg.training.target_action_dim
+            drop_last=False
         )
 
         # 验证
