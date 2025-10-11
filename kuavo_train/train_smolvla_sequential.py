@@ -295,6 +295,9 @@ def create_dataloader_with_language(
         DataLoader
     """
 
+    # 用于记录是否已经打印过调试信息
+    _debug_printed = [False]
+
     def collate_fn_with_language(batch):
         """为batch添加language instruction并填充action/state维度"""
         # 使用默认collate
@@ -306,14 +309,27 @@ def create_dataloader_with_language(
         batch_dict['task'] = [language_instruction] * batch_size
 
         # 填充action和state维度（从Kuavo的16维到SmolVLA的32维）
+        padded_keys = []
         for key in batch_dict.keys():
             if isinstance(batch_dict[key], torch.Tensor):
+                original_shape = batch_dict[key].shape
                 if 'action' in key.lower():
                     # 填充action维度
                     batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_action_dim)
+                    if not _debug_printed[0]:
+                        padded_keys.append(f"{key} (action): {original_shape} → {batch_dict[key].shape}")
                 elif 'state' in key.lower() or 'observation.state' in key:
                     # 填充state维度
                     batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_state_dim)
+                    if not _debug_printed[0]:
+                        padded_keys.append(f"{key} (state): {original_shape} → {batch_dict[key].shape}")
+
+        # 打印调试信息（只打印一次）
+        if not _debug_printed[0] and padded_keys:
+            print("\n🔍 Collate_fn padding info:")
+            for info in padded_keys:
+                print(f"   ✅ {info}")
+            _debug_printed[0] = True
 
         return batch_dict
 
@@ -443,6 +459,9 @@ def create_mixed_dataloader(
     print(f"📊 Mixed Dataset: {len(mixed_dataset)} frames (with replay)")
     print(f"   Weights: {mixed_dataset.weights}")
 
+    # 用于记录是否已经打印过调试信息
+    _debug_printed_mixed = [False]
+
     def collate_fn_with_padding(batch):
         """collate函数：处理mixed dataset的batch并填充维度"""
         from torch.utils.data._utils.collate import default_collate
@@ -461,12 +480,25 @@ def create_mixed_dataloader(
         target_action_dim = cfg.policy.max_action_dim
         target_state_dim = cfg.policy.max_state_dim
 
+        padded_keys = []
         for key in batch_dict.keys():
             if isinstance(batch_dict[key], torch.Tensor):
+                original_shape = batch_dict[key].shape
                 if 'action' in key.lower():
                     batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_action_dim)
+                    if not _debug_printed_mixed[0]:
+                        padded_keys.append(f"{key} (action): {original_shape} → {batch_dict[key].shape}")
                 elif 'state' in key.lower() or 'observation.state' in key:
                     batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_state_dim)
+                    if not _debug_printed_mixed[0]:
+                        padded_keys.append(f"{key} (state): {original_shape} → {batch_dict[key].shape}")
+
+        # 打印调试信息（只打印一次）
+        if not _debug_printed_mixed[0] and padded_keys:
+            print("\n🔍 Mixed collate_fn padding info:")
+            for info in padded_keys:
+                print(f"   ✅ {info}")
+            _debug_printed_mixed[0] = True
 
         return batch_dict
 
@@ -748,6 +780,15 @@ def main(cfg: DictConfig):
         for batch in epoch_bar:
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
                      for k, v in batch.items()}
+
+            # Debug: 打印batch中所有tensor的形状
+            if num_batches == 0:  # 只在第一个batch打印
+                print("\n🔍 Debug: Batch tensor shapes:")
+                for key, value in batch.items():
+                    if isinstance(value, torch.Tensor):
+                        print(f"   {key}: {value.shape}")
+                    elif isinstance(value, list):
+                        print(f"   {key}: list of {len(value)} items")
 
             # Forward
             loss, _ = policy.forward(batch)
