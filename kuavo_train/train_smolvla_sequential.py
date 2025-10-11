@@ -167,8 +167,7 @@ def create_dataloader_with_language(
     batch_size: int,
     num_workers: int,
     pin_memory: bool = True,
-    drop_last: bool = False,
-    target_action_dim: int = 16
+    drop_last: bool = False
 ) -> DataLoader:
     """
     创建包含language instruction的DataLoader
@@ -186,7 +185,7 @@ def create_dataloader_with_language(
     """
 
     def collate_fn_with_language(batch):
-        """为batch添加language instruction并适配动作维度"""
+        """为batch添加language instruction"""
         # 使用默认collate
         from torch.utils.data._utils.collate import default_collate
         batch_dict = default_collate(batch)
@@ -194,17 +193,6 @@ def create_dataloader_with_language(
         # 添加task字段
         batch_size = batch_dict[list(batch_dict.keys())[0]].shape[0]
         batch_dict['task'] = [language_instruction] * batch_size
-
-        # 适配动作维度：如果动作是16维但需要32维，进行填充
-        for key, value in batch_dict.items():
-            if isinstance(value, torch.Tensor) and 'action' in key.lower():
-                if value.shape[-1] == 16 and target_action_dim > 16:
-                    # 填充动作维度
-                    if value.shape[-1] < target_action_dim:
-                        padding_size = target_action_dim - value.shape[-1]
-                        padding = torch.zeros(
-                            *value.shape[:-1], padding_size, dtype=value.dtype)
-                        batch_dict[key] = torch.cat([value, padding], dim=-1)
 
         return batch_dict
 
@@ -500,21 +488,6 @@ def main(cfg: DictConfig):
     output_features = {k: ft for k,
                        ft in features.items() if ft.type is FeatureType.ACTION}
 
-    # 适配动作维度：修改output_features以匹配目标动作维度
-    target_action_dim = cfg.training.target_action_dim
-    for key, feature in output_features.items():
-        if hasattr(feature, 'shape') and len(feature.shape) > 0:
-            # 修改动作特征的维度
-            if feature.shape[-1] == 16 and target_action_dim > 16:
-                print(
-                    f"🔧 Adapting {key} feature dimension: {feature.shape} -> {target_action_dim}")
-                # 创建新的特征对象，保持其他属性不变
-                from copy import deepcopy
-                new_feature = deepcopy(feature)
-                new_feature.shape = list(
-                    feature.shape[:-1]) + [target_action_dim]
-                output_features[key] = new_feature
-
     dataset_stats = dataset_metadata.stats
 
     # ==================== 构建Policy配置 ====================
@@ -526,13 +499,6 @@ def main(cfg: DictConfig):
         output_features=output_features,
         device=device,
     )
-
-    # 🔧 强制设置正确的动作维度（Hydra可能会根据output_features覆盖这个值）
-    target_action_dim = cfg.training.target_action_dim
-    if policy_cfg.max_action_dim != target_action_dim:
-        print(
-            f"🔧 Overriding max_action_dim: {policy_cfg.max_action_dim} -> {target_action_dim}")
-        policy_cfg.max_action_dim = target_action_dim
 
     # Override learning rate from task config
     if hasattr(task_cfg.task.training, 'policy'):
@@ -571,39 +537,6 @@ def main(cfg: DictConfig):
         policy = SmolVLAPolicyWrapper(policy_cfg, dataset_stats)
 
     policy = policy.to(device)
-
-    # 适配动作维度：如果数据是16维但模型是32维，需要填充数据
-    if policy.config.max_action_dim > 16:
-        print(
-            f"\n🔧 Adapting action dimensions: Data=16, Model={policy.config.max_action_dim}")
-        print("   Padding action data to match model dimensions...")
-
-        # 更新归一化统计信息以匹配新的动作维度
-        if hasattr(policy, 'normalize_targets') and hasattr(policy.normalize_targets, 'stats'):
-            for key, stats in policy.normalize_targets.stats.items():
-                if 'action' in key.lower() and stats['mean'].shape[0] == 16:
-                    # 扩展动作统计信息
-                    old_mean = stats['mean']
-                    old_std = stats['std']
-
-                    # 转换为torch张量（如果是numpy数组）
-                    if hasattr(old_mean, 'numpy'):  # 已经是torch张量
-                        old_mean_tensor = old_mean
-                        old_std_tensor = old_std
-                    else:  # numpy数组
-                        old_mean_tensor = torch.from_numpy(old_mean)
-                        old_std_tensor = torch.from_numpy(old_std)
-
-                    # 用0填充均值和标准差
-                    new_mean = torch.cat(
-                        [old_mean_tensor, torch.zeros(policy.config.max_action_dim - 16)])
-                    new_std = torch.cat(
-                        [old_std_tensor, torch.ones(policy.config.max_action_dim - 16)])
-
-                    stats['mean'] = new_mean
-                    stats['std'] = new_std
-                    print(
-                        f"   Updated normalization stats for {key}: {old_mean.shape} -> {new_mean.shape}")
 
     policy.train()
 

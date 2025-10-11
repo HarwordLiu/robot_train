@@ -39,7 +39,7 @@ policy:
 
   # 动作空间配置（Kuavo双臂16关节机器人）
   max_state_dim: 16 # Kuavo状态维度：16关节
-  max_action_dim: 32 # 使用预训练模型的32维动作空间
+  max_action_dim: 16 # Kuavo动作维度：16关节（SmolVLA会自动填充到32维）
   chunk_size: 50 # 动作序列长度（Flow Matching生成50步）
   n_action_steps: 8 # 每次执行8步动作（与Diffusion策略一致）
 
@@ -80,7 +80,7 @@ training:
   seed: 42
 
   # 动作维度适配配置
-  target_action_dim: 32 # 目标动作维度（与模型配置一致）
+  target_action_dim: 16 # 目标动作维度（与Kuavo数据一致）
 
   # 数据加载
   batch_size: 16
