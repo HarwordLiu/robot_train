@@ -38,6 +38,7 @@ from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 from functools import partial
 import json
+from typing import Optional, Dict, Any
 
 import torch
 import torch.nn as nn
@@ -63,7 +64,8 @@ def setup_logging():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler('smolvla_sequential_training.log', encoding='utf-8')
+            logging.FileHandler(
+                'smolvla_sequential_training.log', encoding='utf-8')
         ]
     )
     return logging.getLogger("SmolVLASequentialTraining")
@@ -120,7 +122,8 @@ class ReplayDatasetManager:
         replay_config = self.cfg.sequential.get(stage_key, {})
 
         if not replay_config:
-            print(f"⚠️  No replay config found for stage {self.current_task_id}")
+            print(
+                f"⚠️  No replay config found for stage {self.current_task_id}")
             return {}, {}
 
         print(f"\n📦 Loading Replay Buffer for Stage {self.current_task_id}")
@@ -132,7 +135,8 @@ class ReplayDatasetManager:
 
                 # 只加载之前的任务
                 if task_id < self.current_task_id:
-                    print(f"  Loading Task {task_id} (weight: {weight:.1%})...")
+                    print(
+                        f"  Loading Task {task_id} (weight: {weight:.1%})...")
 
                     # 加载任务配置
                     task_cfg = load_task_config(self.cfg_root, task_id)
@@ -150,7 +154,8 @@ class ReplayDatasetManager:
                     self.replay_datasets[task_id] = dataset
                     self.replay_weights[task_id] = weight
 
-                    print(f"    ✅ Loaded {len(dataset)} frames from Task {task_id}")
+                    print(
+                        f"    ✅ Loaded {len(dataset)} frames from Task {task_id}")
 
         print("="*70 + "\n")
         return self.replay_datasets, self.replay_weights
@@ -254,10 +259,12 @@ def create_mixed_dataloader(
     all_datasets = [(current_dataset, language_instruction)]
 
     for replay_task_id, replay_dataset in replay_manager.replay_datasets.items():
-        replay_task_cfg = load_task_config(Path(cfg.hydra.run.dir).parent.parent.parent / "configs/policy", replay_task_id)
+        replay_task_cfg = load_task_config(
+            Path(cfg.hydra.run.dir).parent.parent.parent / "configs/policy", replay_task_id)
         replay_language = replay_task_cfg.task.language_instruction
         all_datasets.append((replay_dataset, replay_language))
-        print(f"📦 Adding Task {replay_task_id} replay: {len(replay_dataset)} frames")
+        print(
+            f"📦 Adding Task {replay_task_id} replay: {len(replay_dataset)} frames")
 
     # 为每个数据集创建单独的dataloader，然后轮流采样
     # 简化版本：直接concatenate datasets
@@ -297,7 +304,8 @@ def create_mixed_dataloader(
         def __getitem__(self, idx):
             # 根据weights随机选择一个dataset
             import random
-            dataset_idx = random.choices(range(len(self.datasets_with_language)), weights=self.weights, k=1)[0]
+            dataset_idx = random.choices(
+                range(len(self.datasets_with_language)), weights=self.weights, k=1)[0]
             dataset, language = self.datasets_with_language[dataset_idx]
 
             # 从该dataset随机选择一个样本
@@ -385,13 +393,14 @@ def validate_all_tasks(
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f"Task {task_id} Validation", leave=False):
                 batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
-                        for k, v in batch.items()}
+                         for k, v in batch.items()}
 
                 loss, _ = policy.forward(batch)
                 total_loss += loss.item()
                 num_batches += 1
 
-        avg_loss = total_loss / num_batches if num_batches > 0 else float('inf')
+        avg_loss = total_loss / \
+            num_batches if num_batches > 0 else float('inf')
         validation_results[task_id] = avg_loss
 
         print(f"  Task {task_id} Validation Loss: {avg_loss:.4f}")
@@ -439,7 +448,8 @@ def main(cfg: DictConfig):
     print("="*70 + "\n")
 
     # 设置输出目录
-    output_directory = Path(cfg.training.output_directory) / f"task{task_id}_{task_name}"
+    output_directory = Path(cfg.training.output_directory) / \
+        f"task{task_id}_{task_name}"
     output_directory.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir=str(output_directory))
 
@@ -454,8 +464,10 @@ def main(cfg: DictConfig):
 
     # 构建features
     features = dataset_to_policy_features(dataset_metadata.features)
-    input_features = {k: ft for k, ft in features.items() if ft.type is not FeatureType.ACTION}
-    output_features = {k: ft for k, ft in features.items() if ft.type is FeatureType.ACTION}
+    input_features = {k: ft for k, ft in features.items(
+    ) if ft.type is not FeatureType.ACTION}
+    output_features = {k: ft for k,
+                       ft in features.items() if ft.type is FeatureType.ACTION}
 
     dataset_stats = dataset_metadata.stats
 
@@ -478,7 +490,8 @@ def main(cfg: DictConfig):
     # ==================== 加载/创建模型 ====================
     if task_cfg.training.resume_from == 'pretrained':
         # Stage 1: 从HuggingFace预训练加载
-        print(f"\n📂 Loading pretrained SmolVLA from {task_cfg.training.pretrained_path}")
+        print(
+            f"\n📂 Loading pretrained SmolVLA from {task_cfg.training.pretrained_path}")
         policy = SmolVLAPolicyWrapper.from_pretrained(
             task_cfg.training.pretrained_path,
             config=policy_cfg,
@@ -496,7 +509,8 @@ def main(cfg: DictConfig):
             config=policy_cfg,
             dataset_stats=dataset_stats
         )
-        print(f"✅ Successfully loaded Task {prev_task_id} model for sequential training")
+        print(
+            f"✅ Successfully loaded Task {prev_task_id} model for sequential training")
 
     else:
         # 从头训练（不推荐）
@@ -556,7 +570,7 @@ def main(cfg: DictConfig):
 
         for batch in epoch_bar:
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
-                    for k, v in batch.items()}
+                     for k, v in batch.items()}
 
             # Forward
             loss, _ = policy.forward(batch)
@@ -594,11 +608,13 @@ def main(cfg: DictConfig):
         # 多任务验证
         if (epoch + 1) % cfg.training.validation_freq_epoch == 0:
             cfg_root = Path(__file__).parent.parent / "configs/policy"
-            validation_results = validate_all_tasks(policy, cfg, task_id, device, cfg_root)
+            validation_results = validate_all_tasks(
+                policy, cfg, task_id, device, cfg_root)
 
             # Log validation results
             for val_task_id, val_loss in validation_results.items():
-                writer.add_scalar(f"validation/task{val_task_id}_loss", val_loss, epoch)
+                writer.add_scalar(
+                    f"validation/task{val_task_id}_loss", val_loss, epoch)
 
         # 保存最佳模型
         if avg_loss < best_loss:
