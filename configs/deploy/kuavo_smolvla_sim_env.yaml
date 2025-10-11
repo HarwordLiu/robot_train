@@ -1,0 +1,134 @@
+hydra: # Hydra configuration directory
+  run:
+    dir: ./outputs/kuavo_smolvla_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/kuavo_smolvla_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+# ==================== SmolVLA Simulation Environment Configuration ====================
+# This config is for deploying SmolVLA sequential multi-task models in simulation
+
+# Environment config
+real: false # Simulation environment
+only_arm: true # Only use arm data
+eef_type: rq2f85 # End-effector type: rq2f85 for simulation
+control_mode: joint # Joint control mode
+which_arm: both # Which arm: left, right, both
+head_init: [0, 0.209] # Robot head initial position
+
+# Input images: must match training configuration
+# SmolVLA typically uses head camera + depth
+input_images:
+  ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
+depth_range: [0, 1000] # Depth image clipping range (mm)
+image_size: [480, 640] # Original ROS topic image size
+target_image_size: [512, 512] # SmolVLA requires 512x512 (NOT 224x224!)
+ros_rate: 10 # Inference frequency (Hz)
+
+# End-effector DOF configuration
+qiangnao_dof_needed: 1
+leju_claw_dof_needed: 1
+rq2f85_dof_needed: 1
+
+# Arm initialization and limits
+arm_init: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # Arm initial position
+arm_min:
+  [
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+  ]
+arm_max: [180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180]
+
+eef_min: [0]
+eef_max: [1]
+
+is_binary: false
+
+# ==================== SmolVLA Inference Configuration ====================
+go_bag_path: /your_bag_path # Provide full bag path for inference
+
+policy_type: 'smolvla' # SmolVLA sequential policy
+use_delta: false # Delta action (not supported yet)
+eval_episodes: 50 # Number of evaluation episodes
+seed: 42 # Random seed
+start_seed: 42 # Episode start seed
+device: 'cuda' # or "cpu"
+
+# ==================== Model Path Configuration ====================
+# Points to SmolVLA sequential training outputs
+
+# Task selection: Change this to evaluate different tasks
+# Options:
+#   - task1_moving_grasp: Moving target grasping from conveyor belt
+#   - task2_weighing: Package weighing
+#   - task3_placement: Daily chemical product placement
+#   - task4_sorting: Full process sorting
+task: 'smolvla_sequential/task1_moving_grasp'
+method: 'smolvla_sequential'
+timestamp: 'run_20251011_100000' # Change to your training timestamp
+epoch: 'best' # or specific epoch number like 10, 20
+
+# ==================== Language Instruction Configuration ====================
+# SmolVLA uses language instructions to condition the policy
+# Change this based on which task you're evaluating
+
+# Task 1: Moving target grasping
+language_instruction: "Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area"
+
+# Task 2: Package weighing (uncomment to use)
+# language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+
+# Task 3: Product placement (uncomment to use)
+# language_instruction: "Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up"
+
+# Task 4: Full process sorting (uncomment to use)
+# language_instruction: "Move from the starting position, pick up the workpiece, move to the designated location and place it precisely"
+
+# ==================== Multi-Task Evaluation Configuration ====================
+# For evaluating all 4 tasks sequentially, use this configuration
+
+# Enable multi-task evaluation (optional)
+multi_task_eval: false # Set to true to evaluate all tasks
+
+# If multi_task_eval is true, define tasks to evaluate
+tasks_to_evaluate:
+  - task_id: 1
+    task_name: 'task1_moving_grasp'
+    language_instruction: "Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area"
+    episodes: 10
+  - task_id: 2
+    task_name: 'task2_weighing'
+    language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+    episodes: 10
+  - task_id: 3
+    task_name: 'task3_placement'
+    language_instruction: "Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up"
+    episodes: 10
+  - task_id: 4
+    task_name: 'task4_sorting'
+    language_instruction: "Move from the starting position, pick up the workpiece, move to the designated location and place it precisely"
+    episodes: 10
+
+# ==================== Environment Configuration ====================
+max_episode_steps: 500 # Maximum episode steps
+env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
+
+# ==================== SmolVLA Specific Notes ====================
+# 1. Image size MUST be 512x512 (SmolVLA requirement)
+# 2. Policy outputs 50-frame action chunks, but only first step is executed
+# 3. Action dimension is 32D, but only first 16D are used for Kuavo control
+# 4. Language instruction is REQUIRED for SmolVLA inference
+# 5. To evaluate different tasks, change both 'task' and 'language_instruction'
+# 6. Model path format: outputs/train/smolvla_sequential/task{N}_{name}/best
