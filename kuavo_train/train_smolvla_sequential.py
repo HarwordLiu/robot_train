@@ -167,7 +167,8 @@ def create_dataloader_with_language(
     batch_size: int,
     num_workers: int,
     pin_memory: bool = True,
-    drop_last: bool = False
+    drop_last: bool = False,
+    target_action_dim: int = 16
 ) -> DataLoader:
     """
     创建包含language instruction的DataLoader
@@ -185,7 +186,7 @@ def create_dataloader_with_language(
     """
 
     def collate_fn_with_language(batch):
-        """为batch添加language instruction"""
+        """为batch添加language instruction并适配动作维度"""
         # 使用默认collate
         from torch.utils.data._utils.collate import default_collate
         batch_dict = default_collate(batch)
@@ -193,6 +194,17 @@ def create_dataloader_with_language(
         # 添加task字段
         batch_size = batch_dict[list(batch_dict.keys())[0]].shape[0]
         batch_dict['task'] = [language_instruction] * batch_size
+
+        # 适配动作维度：如果动作是16维但需要32维，进行填充
+        for key, value in batch_dict.items():
+            if isinstance(value, torch.Tensor) and 'action' in key.lower():
+                if value.shape[-1] == 16 and target_action_dim > 16:
+                    # 填充动作维度
+                    if value.shape[-1] < target_action_dim:
+                        padding_size = target_action_dim - value.shape[-1]
+                        padding = torch.zeros(
+                            *value.shape[:-1], padding_size, dtype=value.dtype)
+                        batch_dict[key] = torch.cat([value, padding], dim=-1)
 
         return batch_dict
 
@@ -247,7 +259,8 @@ def create_mixed_dataloader(
             cfg.training.batch_size,
             cfg.training.num_workers,
             pin_memory=(cfg.training.device != 'cpu'),
-            drop_last=cfg.training.drop_last
+            drop_last=cfg.training.drop_last,
+            target_action_dim=cfg.training.target_action_dim
         )
 
     # 混合replay数据
@@ -383,7 +396,8 @@ def validate_all_tasks(
             batch_size=cfg.training.batch_size,
             num_workers=cfg.training.num_workers // 2,
             pin_memory=(device.type != 'cpu'),
-            drop_last=False
+            drop_last=False,
+            target_action_dim=cfg.training.target_action_dim
         )
 
         # 验证
@@ -535,6 +549,13 @@ def main(cfg: DictConfig):
         policy = SmolVLAPolicyWrapper(policy_cfg, dataset_stats)
 
     policy = policy.to(device)
+
+    # 适配动作维度：如果数据是16维但模型是32维，需要填充数据
+    if policy.config.max_action_dim > 16:
+        print(
+            f"\n🔧 Adapting action dimensions: Data=16, Model={policy.config.max_action_dim}")
+        print("   Padding action data to match model dimensions...")
+
     policy.train()
 
     # ==================== 准备数据 ====================

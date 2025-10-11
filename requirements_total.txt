@@ -253,4 +253,5 @@ pympler
 matplotlib
 transformers>=4.50.3,<4.52.0
 num2words
+accelerate
 -e .
