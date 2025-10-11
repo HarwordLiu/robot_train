@@ -4,6 +4,7 @@
 
 defaults:
   - _self_
+  - task: task1_moving_grasp # 默认任务配置
 
 # Hydra配置
 hydra:
@@ -23,35 +24,35 @@ policy:
   _target_: kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper
 
   # VLM Backbone配置
-  vlm_model_name: "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
-  load_vlm_weights: True  # 任务1从HuggingFace预训练开始
+  vlm_model_name: 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'
+  load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
-  freeze_vision_encoder: True   # 冻结SigLIP视觉编码器
-  train_expert_only: True        # 只训练Action Expert
-  train_state_proj: True         # 训练state投影层
+  freeze_vision_encoder: True # 冻结SigLIP视觉编码器
+  train_expert_only: True # 只训练Action Expert
+  train_state_proj: True # 训练state投影层
 
   # 观测配置
-  n_obs_steps: 1  # 使用当前帧（SmolVLA标准）
+  n_obs_steps: 1 # 使用当前帧（SmolVLA标准）
 
   # 动作空间配置（Kuavo双臂16关节机器人）
-  max_state_dim: 16   # Kuavo状态维度：16关节
-  max_action_dim: 16  # Kuavo动作维度：16关节（左臂7+左爪1+右臂7+右爪1）
-  chunk_size: 50      # 动作序列长度（Flow Matching生成50步）
-  n_action_steps: 8   # 每次执行8步动作（与Diffusion策略一致）
+  max_state_dim: 16 # Kuavo状态维度：16关节
+  max_action_dim: 16 # Kuavo动作维度：16关节（左臂7+左爪1+右臂7+右爪1）
+  chunk_size: 50 # 动作序列长度（Flow Matching生成50步）
+  n_action_steps: 8 # 每次执行8步动作（与Diffusion策略一致）
 
   # 图像预处理配置
-  resize_imgs_with_padding: [512, 512]  # SmolVLA标准输入尺寸
-  empty_cameras: 0  # 不使用空相机占位
+  resize_imgs_with_padding: [512, 512] # SmolVLA标准输入尺寸
+  empty_cameras: 0 # 不使用空相机占位
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
-  num_steps: 10  # 推理时的去噪步数
+  num_steps: 10 # 推理时的去噪步数
 
   # 归一化配置
   normalization_mapping:
     VISUAL:
       _target_: lerobot.configs.types.NormalizationMode
-      value: IDENTITY  # SmolVLA内部处理图像归一化
+      value: IDENTITY # SmolVLA内部处理图像归一化
     STATE:
       _target_: lerobot.configs.types.NormalizationMode
       value: MEAN_STD
@@ -87,29 +88,29 @@ training:
 
   # 多任务验证配置（防遗忘的关键）
   validate_all_previous_tasks: True
-  validation_freq_epoch: 2  # 每2个epoch验证所有之前的任务
-  validation_episodes: 10    # 每个任务用10个episodes做验证
+  validation_freq_epoch: 2 # 每2个epoch验证所有之前的任务
+  validation_episodes: 10 # 每个任务用10个episodes做验证
 
 # ==================== 顺序训练策略配置 ====================
 sequential:
   # 是否使用Replay Buffer（防遗忘的核心技术）
   use_replay_buffer: True
-  replay_strategy: 'proportional'  # 比例混合策略
+  replay_strategy: 'proportional' # 比例混合策略
 
   # Stage 2: 训练任务2时的数据混合比例
   stage2_replay:
-    task1: 0.2  # 20% 任务1数据
-    task2: 0.8  # 80% 任务2数据
+    task1: 0.2 # 20% 任务1数据
+    task2: 0.8 # 80% 任务2数据
 
   # Stage 3: 训练任务3时的数据混合比例
   stage3_replay:
-    task1: 0.1  # 10% 任务1数据
-    task2: 0.2  # 20% 任务2数据
-    task3: 0.7  # 70% 任务3数据
+    task1: 0.1 # 10% 任务1数据
+    task2: 0.2 # 20% 任务2数据
+    task3: 0.7 # 70% 任务3数据
 
   # Stage 4: 训练任务4时的数据混合比例（最终多任务模型）
   stage4_replay:
-    task1: 0.1  # 10% 任务1数据
-    task2: 0.1  # 10% 任务2数据
-    task3: 0.2  # 20% 任务3数据
-    task4: 0.6  # 60% 任务4数据
+    task1: 0.1 # 10% 任务1数据
+    task2: 0.1 # 10% 任务2数据
+    task3: 0.2 # 20% 任务3数据
+    task4: 0.6 # 60% 任务4数据
