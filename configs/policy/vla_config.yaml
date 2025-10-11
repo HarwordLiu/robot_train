@@ -28,8 +28,8 @@ training:
   accumulation_steps: 1
   ema_power: 0.75
 
-  batch_size: 256 # 最大化训练速度（GPU显存约65%）
-  num_workers: 12 # 最小化RAM占用，4个worker足够喂饱GPU
+  batch_size: 128
+  num_workers: 22
   drop_last: False
 
   test_training_mode: False
