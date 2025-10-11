@@ -430,6 +430,15 @@ def validate_all_tasks(
 def main(cfg: DictConfig):
     """主训练流程"""
 
+    # 设置 HuggingFace 镜像源以提高下载速度
+    import os
+    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+    os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
+
+    # 可选：设置其他镜像源
+    # os.environ['HF_ENDPOINT'] = 'https://huggingface.co'  # 官方源
+    # os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'   # 中国镜像源
+
     logger = setup_logging()
     set_seed(cfg.training.seed)
 

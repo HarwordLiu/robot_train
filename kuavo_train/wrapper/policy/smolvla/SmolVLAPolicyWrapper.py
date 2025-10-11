@@ -59,7 +59,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         # 打印模型参数量
         total_params = sum(p.numel() for p in self.parameters())
-        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        trainable_params = sum(p.numel()
+                               for p in self.parameters() if p.requires_grad)
         print(f"\nModel Parameters:")
         print(f"  Total: {total_params:,}")
         print(f"  Trainable: {trainable_params:,}")
@@ -172,7 +173,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         # 如果没有提供config，从预训练路径加载
         if config is None:
             from .SmolVLAConfigWrapper import SmolVLAConfigWrapper
-            config = SmolVLAConfigWrapper.from_pretrained(pretrained_name_or_path)
+            config = SmolVLAConfigWrapper.from_pretrained(
+                pretrained_name_or_path)
 
         # 创建模型实例
         model = cls(config, dataset_stats)
@@ -208,7 +210,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                     device='cpu',
                     checkpoint_keys_mapping="model._orig_mod.//model."
                 )
-                print(f"✅ Loaded weights from HuggingFace: {pretrained_name_or_path}")
+                print(
+                    f"✅ Loaded weights from HuggingFace: {pretrained_name_or_path}")
             except Exception as e:
                 print(f"⚠️  Failed to load from HuggingFace: {e}")
                 print(f"Using random initialization")

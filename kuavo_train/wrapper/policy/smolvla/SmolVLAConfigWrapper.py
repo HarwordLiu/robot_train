@@ -33,7 +33,8 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
 
         # 验证Kuavo双臂机器人的动作维度
         if self.max_action_dim != 16:
-            print(f"⚠️  Warning: max_action_dim is {self.max_action_dim}, expected 16 for Kuavo dual-arm robot")
+            print(
+                f"⚠️  Warning: max_action_dim is {self.max_action_dim}, expected 16 for Kuavo dual-arm robot")
 
         # 打印SmolVLA配置摘要
         print(f"📋 SmolVLA Config Summary (Kuavo):")

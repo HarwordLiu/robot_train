@@ -26,7 +26,7 @@ policy:
   _target_: kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper
 
   # VLM Backbone配置
-  vlm_model_name: 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'
+  vlm_model_name: 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct' # 使用镜像源下载
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
