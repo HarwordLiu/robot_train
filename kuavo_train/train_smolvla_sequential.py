@@ -268,6 +268,36 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict],
     return padded_stats
 
 
+def create_lerobot_dataset_with_deltas(
+    repo_id: str,
+    root: str,
+    episodes: list,
+    delta_timestamps: Dict[str, list]
+) -> LeRobotDataset:
+    """
+    创建LeRobotDataset并配置delta_timestamps以加载action chunks
+
+    Args:
+        repo_id: Dataset repository ID
+        root: Dataset root path
+        episodes: List of episode indices
+        delta_timestamps: Delta timestamps配置，例如：
+            {
+                "observation.state": [0],  # 当前帧
+                "action": [i/fps for i in range(50)]  # 未来50帧
+            }
+
+    Returns:
+        配置好的LeRobotDataset
+    """
+    return LeRobotDataset(
+        repo_id,
+        root=root,
+        episodes=episodes,
+        delta_timestamps=delta_timestamps
+    )
+
+
 def create_dataloader_with_language(
     dataset: LeRobotDataset,
     language_instruction: str,
@@ -364,14 +394,28 @@ def create_mixed_dataloader(
     task_id = task_cfg.task.id
     language_instruction = task_cfg.task.language_instruction
 
-    # 当前任务数据集
+    # 构建delta_timestamps配置 (用于加载action chunks)
+    # 假设fps=30，chunk_size=50
+    chunk_size = cfg.policy.chunk_size
+    fps = 30  # Kuavo数据集的fps
+    delta_timestamps = {
+        "observation.state": [0],  # 只取当前帧
+        "action": [i / fps for i in range(chunk_size)],  # 未来chunk_size帧
+    }
+
+    print(f"📐 Dataset delta_timestamps configuration:")
+    print(f"   - observation.state: current frame only")
+    print(f"   - action: {chunk_size} future frames ({chunk_size/fps:.2f}s @ {fps}fps)")
+
+    # 当前任务数据集（使用delta_timestamps）
     current_dataset = LeRobotDataset(
         task_cfg.task.data.repoid,
         root=task_cfg.task.data.root,
         episodes=list(range(
             task_cfg.task.data.episodes_to_use[0],
             task_cfg.task.data.episodes_to_use[1] + 1
-        ))
+        )),
+        delta_timestamps=delta_timestamps
     )
 
     print(f"📊 Current Task {task_id} Dataset: {len(current_dataset)} frames")
