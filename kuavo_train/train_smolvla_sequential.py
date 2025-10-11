@@ -161,17 +161,19 @@ class ReplayDatasetManager:
         return self.replay_datasets, self.replay_weights
 
 
-def pad_tensor_to_target_dim(tensor: torch.Tensor, target_dim: int) -> torch.Tensor:
+def pad_tensor_to_target_dim(tensor, target_dim: int):
     """
-    将tensor从实际维度填充到目标维度
+    将tensor或numpy array从实际维度填充到目标维度
 
     Args:
-        tensor: 输入tensor，形状为 [..., actual_dim]
+        tensor: 输入tensor (torch.Tensor或numpy.ndarray)，形状为 [..., actual_dim]
         target_dim: 目标维度
 
     Returns:
-        填充后的tensor，形状为 [..., target_dim]
+        填充后的tensor，类型与输入相同
     """
+    import numpy as np
+
     actual_dim = tensor.shape[-1]
     if actual_dim == target_dim:
         return tensor
@@ -179,16 +181,25 @@ def pad_tensor_to_target_dim(tensor: torch.Tensor, target_dim: int) -> torch.Ten
         # 填充0到目标维度
         pad_size = target_dim - actual_dim
         pad_shape = list(tensor.shape[:-1]) + [pad_size]
-        pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
-        return torch.cat([tensor, pad_tensor], dim=-1)
+
+        if isinstance(tensor, torch.Tensor):
+            # torch.Tensor: 使用torch.zeros
+            pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
+            return torch.cat([tensor, pad_tensor], dim=-1)
+        elif isinstance(tensor, np.ndarray):
+            # numpy.ndarray: 使用np.zeros
+            pad_array = np.zeros(pad_shape, dtype=tensor.dtype)
+            return np.concatenate([tensor, pad_array], axis=-1)
+        else:
+            raise TypeError(f"Unsupported tensor type: {type(tensor)}")
     else:
         # 截断到目标维度（不应该发生，但以防万一）
         return tensor[..., :target_dim]
 
 
-def pad_dataset_stats(dataset_stats: Dict[str, Dict[str, torch.Tensor]],
+def pad_dataset_stats(dataset_stats: Dict[str, Dict],
                       target_action_dim: int = 32,
-                      target_state_dim: int = 32) -> Dict[str, Dict[str, torch.Tensor]]:
+                      target_state_dim: int = 32) -> Dict[str, Dict]:
     """
     将dataset_stats中的action和state统计信息填充到目标维度
 
@@ -196,13 +207,33 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict[str, torch.Tensor]],
     对于std：填充1（这样归一化时填充部分不会被改变）
 
     Args:
-        dataset_stats: 数据集统计信息字典
+        dataset_stats: 数据集统计信息字典 (可以是torch.Tensor或numpy.ndarray)
         target_action_dim: 目标action维度
         target_state_dim: 目标state维度
 
     Returns:
         填充后的dataset_stats
     """
+    import numpy as np
+
+    def pad_with_ones(tensor, target_dim):
+        """填充1到目标维度（用于std）"""
+        actual_dim = tensor.shape[-1]
+        if actual_dim >= target_dim:
+            return tensor
+
+        pad_size = target_dim - actual_dim
+        pad_shape = list(tensor.shape[:-1]) + [pad_size]
+
+        if isinstance(tensor, torch.Tensor):
+            pad_tensor = torch.ones(pad_shape, dtype=tensor.dtype, device=tensor.device)
+            return torch.cat([tensor, pad_tensor], dim=-1)
+        elif isinstance(tensor, np.ndarray):
+            pad_array = np.ones(pad_shape, dtype=tensor.dtype)
+            return np.concatenate([tensor, pad_array], axis=-1)
+        else:
+            raise TypeError(f"Unsupported tensor type: {type(tensor)}")
+
     padded_stats = {}
 
     for key, stats_dict in dataset_stats.items():
@@ -215,14 +246,7 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict[str, torch.Tensor]],
                     padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_action_dim)
                 elif stat_name == 'std':
                     # std填充1（避免除0，且不改变填充部分的值）
-                    actual_dim = stat_tensor.shape[-1]
-                    if actual_dim < target_action_dim:
-                        pad_size = target_action_dim - actual_dim
-                        pad_shape = list(stat_tensor.shape[:-1]) + [pad_size]
-                        pad_tensor = torch.ones(pad_shape, dtype=stat_tensor.dtype, device=stat_tensor.device)
-                        padded_stats[key][stat_name] = torch.cat([stat_tensor, pad_tensor], dim=-1)
-                    else:
-                        padded_stats[key][stat_name] = stat_tensor
+                    padded_stats[key][stat_name] = pad_with_ones(stat_tensor, target_action_dim)
                 else:
                     # 其他统计信息（如min, max）也需要填充
                     padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_action_dim)
@@ -234,14 +258,7 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict[str, torch.Tensor]],
                 if stat_name == 'mean':
                     padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_state_dim)
                 elif stat_name == 'std':
-                    actual_dim = stat_tensor.shape[-1]
-                    if actual_dim < target_state_dim:
-                        pad_size = target_state_dim - actual_dim
-                        pad_shape = list(stat_tensor.shape[:-1]) + [pad_size]
-                        pad_tensor = torch.ones(pad_shape, dtype=stat_tensor.dtype, device=stat_tensor.device)
-                        padded_stats[key][stat_name] = torch.cat([stat_tensor, pad_tensor], dim=-1)
-                    else:
-                        padded_stats[key][stat_name] = stat_tensor
+                    padded_stats[key][stat_name] = pad_with_ones(stat_tensor, target_state_dim)
                 else:
                     padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_state_dim)
         else:
