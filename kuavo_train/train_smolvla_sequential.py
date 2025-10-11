@@ -186,6 +186,71 @@ def pad_tensor_to_target_dim(tensor: torch.Tensor, target_dim: int) -> torch.Ten
         return tensor[..., :target_dim]
 
 
+def pad_dataset_stats(dataset_stats: Dict[str, Dict[str, torch.Tensor]],
+                      target_action_dim: int = 32,
+                      target_state_dim: int = 32) -> Dict[str, Dict[str, torch.Tensor]]:
+    """
+    将dataset_stats中的action和state统计信息填充到目标维度
+
+    对于mean：填充0
+    对于std：填充1（这样归一化时填充部分不会被改变）
+
+    Args:
+        dataset_stats: 数据集统计信息字典
+        target_action_dim: 目标action维度
+        target_state_dim: 目标state维度
+
+    Returns:
+        填充后的dataset_stats
+    """
+    padded_stats = {}
+
+    for key, stats_dict in dataset_stats.items():
+        if 'action' in key.lower():
+            # 填充action相关统计
+            padded_stats[key] = {}
+            for stat_name, stat_tensor in stats_dict.items():
+                if stat_name == 'mean':
+                    # mean填充0
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_action_dim)
+                elif stat_name == 'std':
+                    # std填充1（避免除0，且不改变填充部分的值）
+                    actual_dim = stat_tensor.shape[-1]
+                    if actual_dim < target_action_dim:
+                        pad_size = target_action_dim - actual_dim
+                        pad_shape = list(stat_tensor.shape[:-1]) + [pad_size]
+                        pad_tensor = torch.ones(pad_shape, dtype=stat_tensor.dtype, device=stat_tensor.device)
+                        padded_stats[key][stat_name] = torch.cat([stat_tensor, pad_tensor], dim=-1)
+                    else:
+                        padded_stats[key][stat_name] = stat_tensor
+                else:
+                    # 其他统计信息（如min, max）也需要填充
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_action_dim)
+
+        elif 'state' in key.lower() or 'observation.state' in key:
+            # 填充state相关统计
+            padded_stats[key] = {}
+            for stat_name, stat_tensor in stats_dict.items():
+                if stat_name == 'mean':
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_state_dim)
+                elif stat_name == 'std':
+                    actual_dim = stat_tensor.shape[-1]
+                    if actual_dim < target_state_dim:
+                        pad_size = target_state_dim - actual_dim
+                        pad_shape = list(stat_tensor.shape[:-1]) + [pad_size]
+                        pad_tensor = torch.ones(pad_shape, dtype=stat_tensor.dtype, device=stat_tensor.device)
+                        padded_stats[key][stat_name] = torch.cat([stat_tensor, pad_tensor], dim=-1)
+                    else:
+                        padded_stats[key][stat_name] = stat_tensor
+                else:
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_state_dim)
+        else:
+            # 不是action或state，直接复制
+            padded_stats[key] = stats_dict
+
+    return padded_stats
+
+
 def create_dataloader_with_language(
     dataset: LeRobotDataset,
     language_instruction: str,
@@ -554,6 +619,15 @@ def main(cfg: DictConfig):
                        ft in features.items() if ft.type is FeatureType.ACTION}
 
     dataset_stats = dataset_metadata.stats
+
+    # 填充dataset_stats到目标维度（Kuavo 16维 → SmolVLA 32维）
+    print("📐 Padding dataset_stats to match SmolVLA dimensions (16D → 32D)...")
+    dataset_stats = pad_dataset_stats(
+        dataset_stats,
+        target_action_dim=cfg.policy.max_action_dim,
+        target_state_dim=cfg.policy.max_state_dim
+    )
+    print("✅ Dataset stats padded successfully")
 
     # ==================== 构建Policy配置 ====================
     from hydra.utils import instantiate

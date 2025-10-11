@@ -9,9 +9,16 @@
 size mismatch for model.state_proj.weight: copying a param with shape torch.Size([960, 32]) from checkpoint, the shape in current model is torch.Size([960, 16]).
 ```
 
-### 错误2：训练时维度不匹配
+### 错误2：训练时Attention维度不匹配
 ```
 RuntimeError: The size of tensor a (267) must match the size of tensor b (233) at non-singleton dimension 2
+```
+
+### 错误3：归一化时维度不匹配
+```
+File "lerobot/policies/normalize.py", line 172, in forward
+    batch[key] = (batch[key] - mean) / (std + 1e-8)
+RuntimeError: The size of tensor a (32) must match the size of tensor b (16) at non-singleton dimension 1
 ```
 
 ## 根本原因
@@ -62,6 +69,18 @@ def pad_tensor_to_target_dim(tensor: torch.Tensor, target_dim: int) -> torch.Ten
         pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
         return torch.cat([tensor, pad_tensor], dim=-1)
     return tensor
+
+
+def pad_dataset_stats(dataset_stats: Dict, target_action_dim: int = 32,
+                      target_state_dim: int = 32) -> Dict:
+    """
+    填充dataset_stats中的统计信息
+
+    - mean: 填充0
+    - std: 填充1（避免除0，不改变填充部分）
+    - min/max: 填充0
+    """
+    # ... 详细实现见代码 ...
 ```
 
 #### 修改DataLoader的collate_fn
@@ -103,27 +122,71 @@ def __post_init__(self):
     print(f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
 ```
 
+#### 在主函数中填充dataset_stats
+
+```python
+# 加载原始16维统计信息
+dataset_stats = dataset_metadata.stats
+
+# 填充到32维
+print("📐 Padding dataset_stats to match SmolVLA dimensions (16D → 32D)...")
+dataset_stats = pad_dataset_stats(
+    dataset_stats,
+    target_action_dim=32,
+    target_state_dim=32
+)
+print("✅ Dataset stats padded successfully")
+
+# 创建模型（使用填充后的stats）
+policy = SmolVLAPolicyWrapper.from_pretrained(
+    pretrained_path,
+    config=policy_cfg,
+    dataset_stats=dataset_stats  # 使用32维stats
+)
+```
+
 ## 工作原理
 
-### 数据流程
+### 完整数据流程
 
 ```
 Kuavo Robot (16D)
     ↓
-LeRobotDataset 加载 (16D)
+LeRobotDataset 加载 (16D action/state)
     ↓
-collate_fn 自动填充 (16D → 32D)
+Dataset Stats 计算 (16D mean/std)
     ↓
-SmolVLA模型输入 (32D)
+pad_dataset_stats() 填充stats (16D → 32D mean/std)
+    ↓
+collate_fn 填充batch数据 (16D → 32D)
+    ↓
+SmolVLA归一化 (使用32D mean/std) ✅
+    ↓
+SmolVLA模型forward (32D input) ✅
     ↓
 预训练权重正确加载 ✅
 ```
 
-### 填充策略
+### 填充策略详解
 
-- **原始数据**: `[x1, x2, ..., x16]`
+#### 数据填充
+- **原始action**: `[x1, x2, ..., x16]`
 - **填充后**: `[x1, x2, ..., x16, 0, 0, ..., 0]`  (后16维填0)
-- **推理时**: SmolVLA输出32维，只使用前16维作为Kuavo控制命令
+
+#### 统计信息填充
+- **mean填充**: `[m1, m2, ..., m16]` → `[m1, m2, ..., m16, 0, 0, ..., 0]`
+- **std填充**: `[s1, s2, ..., s16]` → `[s1, s2, ..., s16, 1, 1, ..., 1]`  (填充1避免除0)
+
+#### 归一化后
+```python
+# 前16维：正常归一化
+normalized[:16] = (action[:16] - mean[:16]) / (std[:16] + 1e-8)
+
+# 后16维：保持0
+normalized[16:] = (0 - 0) / (1 + 1e-8) ≈ 0
+```
+
+**推理时**: SmolVLA输出32维，只使用前16维作为Kuavo控制命令
 
 ## 验证清单
 
@@ -144,13 +207,26 @@ SmolVLA模型输入 (32D)
    - Max Action Dim: 32 (Kuavo actual: 16, auto-padded)
    - Max State Dim: 32 (Kuavo actual: 16, auto-padded)
 
+📂 Loading Dataset Metadata...
+📐 Padding dataset_stats to match SmolVLA dimensions (16D → 32D)...
+✅ Dataset stats padded successfully
+
 ======================================================================
 📂 Loading SmolVLA from: lerobot/smolvla_base
 ======================================================================
 ✅ Loaded weights from HuggingFace: lerobot/smolvla_base
+
+🚀 Starting Training...
+======================================================================
+Epoch 1/20
+======================================================================
+[训练正常进行，loss开始下降...]
 ```
 
-**关键**: 不应再看到 `size mismatch` 错误！
+**关键变化**:
+- ✅ 不应再看到 `size mismatch` 错误
+- ✅ 不应再看到归一化维度不匹配错误
+- ✅ 训练loss正常下降
 
 ## 常见问题
 
