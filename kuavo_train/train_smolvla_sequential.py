@@ -104,10 +104,11 @@ class ReplayDatasetManager:
     在训练任务N时，混合之前任务1到N-1的数据，防止灾难性遗忘
     """
 
-    def __init__(self, cfg: DictConfig, current_task_id: int, cfg_root: Path):
+    def __init__(self, cfg: DictConfig, current_task_id: int, cfg_root: Path, dataset_fps: int):
         self.cfg = cfg
         self.current_task_id = current_task_id
         self.cfg_root = cfg_root
+        self.dataset_fps = dataset_fps
         self.replay_datasets = {}  # task_id -> dataset
         self.replay_weights = {}   # task_id -> weight
 
@@ -131,10 +132,9 @@ class ReplayDatasetManager:
 
         # 构建delta_timestamps配置 (用于加载action chunks)
         chunk_size = self.cfg.policy.chunk_size
-        fps = 30  # Kuavo数据集的fps
         delta_timestamps = {
             "observation.state": [0],  # 只取当前帧
-            "action": [i / fps for i in range(chunk_size)],  # 未来chunk_size帧
+            "action": [i / self.dataset_fps for i in range(chunk_size)],  # 未来chunk_size帧
         }
 
         for task_key, weight in replay_config.items():
@@ -371,7 +371,8 @@ def create_dataloader_with_language(
 def create_mixed_dataloader(
     cfg: DictConfig,
     task_cfg: DictConfig,
-    replay_manager: Optional[ReplayDatasetManager] = None
+    replay_manager: Optional[ReplayDatasetManager] = None,
+    dataset_fps: int = 10
 ) -> DataLoader:
     """
     创建混合了replay数据的DataLoader
@@ -380,6 +381,7 @@ def create_mixed_dataloader(
         cfg: 基础配置
         task_cfg: 当前任务配置
         replay_manager: Replay数据管理器
+        dataset_fps: 数据集的fps（从metadata读取）
 
     Returns:
         混合数据的DataLoader
@@ -388,17 +390,16 @@ def create_mixed_dataloader(
     language_instruction = task_cfg.task.language_instruction
 
     # 构建delta_timestamps配置 (用于加载action chunks)
-    # 假设fps=30，chunk_size=50
     chunk_size = cfg.policy.chunk_size
-    fps = 30  # Kuavo数据集的fps
     delta_timestamps = {
         "observation.state": [0],  # 只取当前帧
-        "action": [i / fps for i in range(chunk_size)],  # 未来chunk_size帧
+        "action": [i / dataset_fps for i in range(chunk_size)],  # 未来chunk_size帧
     }
 
     print(f"📐 Dataset delta_timestamps configuration:")
+    print(f"   - Dataset FPS: {dataset_fps}")
     print(f"   - observation.state: current frame only")
-    print(f"   - action: {chunk_size} future frames ({chunk_size/fps:.2f}s @ {fps}fps)")
+    print(f"   - action: {chunk_size} future frames ({chunk_size/dataset_fps:.2f}s @ {dataset_fps}fps)")
 
     # 当前任务数据集（使用delta_timestamps）
     current_dataset = LeRobotDataset(
@@ -540,7 +541,8 @@ def validate_all_tasks(
     cfg: DictConfig,
     current_task_id: int,
     device: torch.device,
-    cfg_root: Path
+    cfg_root: Path,
+    dataset_fps: int = 10
 ) -> Dict[int, float]:
     """
     验证所有之前的任务（检测遗忘）
@@ -575,10 +577,9 @@ def validate_all_tasks(
 
         # 构建delta_timestamps配置
         chunk_size = cfg.policy.chunk_size
-        fps = 30  # Kuavo数据集的fps
         delta_timestamps = {
             "observation.state": [0],
-            "action": [i / fps for i in range(chunk_size)],
+            "action": [i / dataset_fps for i in range(chunk_size)],
         }
 
         val_dataset = LeRobotDataset(
@@ -690,6 +691,10 @@ def main(cfg: DictConfig):
         root=task_cfg.task.data.root
     )
 
+    # 获取数据集fps（用于配置delta_timestamps）
+    dataset_fps = dataset_metadata.fps
+    print(f"📊 Dataset FPS: {dataset_fps}")
+
     # 构建features
     features = dataset_to_policy_features(dataset_metadata.features)
     input_features = {k: ft for k, ft in features.items(
@@ -763,11 +768,11 @@ def main(cfg: DictConfig):
     replay_manager = None
     if task_id > 1 and cfg.sequential.use_replay_buffer:
         cfg_root = Path(__file__).parent.parent / "configs/policy"
-        replay_manager = ReplayDatasetManager(cfg, task_id, cfg_root)
+        replay_manager = ReplayDatasetManager(cfg, task_id, cfg_root, dataset_fps)
         replay_manager.load_replay_tasks()
 
-    # 创建dataloader
-    dataloader = create_mixed_dataloader(cfg, task_cfg, replay_manager)
+    # 创建dataloader（传递dataset_fps）
+    dataloader = create_mixed_dataloader(cfg, task_cfg, replay_manager, dataset_fps)
 
     # ==================== 构建优化器 ====================
     optimizer = policy.config.get_optimizer_preset().build(policy.parameters())
@@ -857,7 +862,7 @@ def main(cfg: DictConfig):
         if (epoch + 1) % cfg.training.validation_freq_epoch == 0:
             cfg_root = Path(__file__).parent.parent / "configs/policy"
             validation_results = validate_all_tasks(
-                policy, cfg, task_id, device, cfg_root)
+                policy, cfg, task_id, device, cfg_root, dataset_fps)
 
             # Log validation results
             for val_task_id, val_loss in validation_results.items():
@@ -885,7 +890,7 @@ def main(cfg: DictConfig):
     print("="*70)
 
     cfg_root = Path(__file__).parent.parent / "configs/policy"
-    final_results = validate_all_tasks(policy, cfg, task_id, device, cfg_root)
+    final_results = validate_all_tasks(policy, cfg, task_id, device, cfg_root, dataset_fps)
 
     # 保存训练结果
     results_file = output_directory / "training_results.json"
