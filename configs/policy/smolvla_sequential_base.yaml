@@ -4,7 +4,6 @@
 
 defaults:
   - _self_
-  - task: task1_moving_grasp # 默认任务配置
 
 # Hydra配置
 hydra:

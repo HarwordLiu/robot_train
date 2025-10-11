@@ -434,9 +434,17 @@ def main(cfg: DictConfig):
     set_seed(cfg.training.seed)
 
     # 加载任务配置
-    task_cfg = cfg.task
-    task_id = task_cfg.id
-    task_name = task_cfg.name
+    # 从命令行参数获取任务名称
+    task_name = cfg.get('task', 'task1_moving_grasp')
+    if task_name.startswith('tasks/'):
+        task_name = task_name.replace('tasks/', '')
+
+    # 动态加载任务配置
+    cfg_root = Path(__file__).parent.parent / "configs/policy"
+    task_cfg = load_task_config(cfg_root, int(
+        task_name.split('_')[0].replace('task', '')))
+    task_id = task_cfg.task.id
+    task_name = task_cfg.task.name
 
     print("\n" + "="*70)
     print(f"🤖 SmolVLA Sequential Training - Stage {task_id}")
