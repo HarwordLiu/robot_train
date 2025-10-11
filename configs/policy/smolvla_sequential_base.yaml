@@ -1,0 +1,115 @@
+# ==================== SmolVLA顺序多任务训练基础配置 ====================
+# 这是所有4个任务共享的基础配置
+# 任务特定配置在 configs/policy/tasks/ 目录下
+
+defaults:
+  - _self_
+
+# Hydra配置
+hydra:
+  run:
+    dir: ./outputs/train_hydra_save/smolvla_sequential/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/train_hydra_save/smolvla_sequential/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+timestamp: ${now:%Y%m%d_%H%M%S}
+method: 'smolvla_sequential'
+
+# ==================== SmolVLA策略配置 ====================
+policy_name: smolvla
+
+policy:
+  _target_: kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper
+
+  # VLM Backbone配置
+  vlm_model_name: "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+  load_vlm_weights: True  # 任务1从HuggingFace预训练开始
+
+  # 冻结策略（防止灾难性遗忘的关键）
+  freeze_vision_encoder: True   # 冻结SigLIP视觉编码器
+  train_expert_only: True        # 只训练Action Expert
+  train_state_proj: True         # 训练state投影层
+
+  # 观测配置
+  n_obs_steps: 1  # 使用当前帧（SmolVLA标准）
+
+  # 动作空间配置（Kuavo双臂16关节机器人）
+  max_state_dim: 16   # Kuavo状态维度：16关节
+  max_action_dim: 16  # Kuavo动作维度：16关节（左臂7+左爪1+右臂7+右爪1）
+  chunk_size: 50      # 动作序列长度（Flow Matching生成50步）
+  n_action_steps: 8   # 每次执行8步动作（与Diffusion策略一致）
+
+  # 图像预处理配置
+  resize_imgs_with_padding: [512, 512]  # SmolVLA标准输入尺寸
+  empty_cameras: 0  # 不使用空相机占位
+
+  # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
+  num_steps: 10  # 推理时的去噪步数
+
+  # 归一化配置
+  normalization_mapping:
+    VISUAL:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: IDENTITY  # SmolVLA内部处理图像归一化
+    STATE:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+    ACTION:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+
+  # 优化器基础配置（各任务会override学习率）
+  optimizer_betas: [0.9, 0.95]
+  optimizer_eps: 1.0e-08
+  optimizer_weight_decay: 1.0e-10
+  optimizer_grad_clip_norm: 10
+
+  # 学习率调度器配置（各任务会override）
+  scheduler_warmup_steps: 1000
+  scheduler_decay_steps: 15000
+  scheduler_decay_lr: 2.5e-6
+
+# ==================== 训练基础配置 ====================
+training:
+  output_directory: 'outputs/train/smolvla_sequential'
+  device: 'cuda'
+  seed: 42
+
+  # 数据加载
+  batch_size: 16
+  num_workers: 8
+  drop_last: False
+
+  # 日志和保存
+  save_freq_epoch: 5
+  log_freq: 10
+
+  # 多任务验证配置（防遗忘的关键）
+  validate_all_previous_tasks: True
+  validation_freq_epoch: 2  # 每2个epoch验证所有之前的任务
+  validation_episodes: 10    # 每个任务用10个episodes做验证
+
+# ==================== 顺序训练策略配置 ====================
+sequential:
+  # 是否使用Replay Buffer（防遗忘的核心技术）
+  use_replay_buffer: True
+  replay_strategy: 'proportional'  # 比例混合策略
+
+  # Stage 2: 训练任务2时的数据混合比例
+  stage2_replay:
+    task1: 0.2  # 20% 任务1数据
+    task2: 0.8  # 80% 任务2数据
+
+  # Stage 3: 训练任务3时的数据混合比例
+  stage3_replay:
+    task1: 0.1  # 10% 任务1数据
+    task2: 0.2  # 20% 任务2数据
+    task3: 0.7  # 70% 任务3数据
+
+  # Stage 4: 训练任务4时的数据混合比例（最终多任务模型）
+  stage4_replay:
+    task1: 0.1  # 10% 任务1数据
+    task2: 0.1  # 10% 任务2数据
+    task3: 0.2  # 20% 任务3数据
+    task4: 0.6  # 60% 任务4数据

@@ -1,0 +1,40 @@
+# ==================== 任务3：日化产品定姿摆放 ====================
+
+# 任务基本信息
+task:
+  id: 3
+  name: "placement"
+  stage: 3  # Stage 3: 从任务2模型继续
+
+  # 任务描述（中文）
+  description: "机器人从杂乱摆放的日化瓶中随机拾取一瓶，传递至另一只手后，再按照指定姿态将其摆放在目标位置。瓶身摆放要求：瓶口位于黄色区域外部；瓶身大部分位于黄色区域内部；瓶身标签面朝上"
+
+  # Language Instruction（英文）
+  language_instruction: "Pick up a bottle from the cluttered daily chemical bottles, transfer it to the other hand, and place it in the specified pose with the label facing up in the yellow area. Requirements: bottle mouth outside the yellow area, most of the bottle body inside the yellow area, label facing up"
+
+  # 数据配置
+  data:
+    root: '/root/robot/data/task3/data/lerobot/1-400/'
+    repoid: 'lerobot/task3_placement'
+    episodes_to_use: [0, 199]
+
+  # 训练配置
+  training:
+    max_epoch: 30  # 任务3最复杂，需要更多epochs
+
+    # Stage 3: 从任务2的最佳checkpoint继续
+    resume_from: 'task'
+    resume_task_id: 2
+    resume_path: 'outputs/train/smolvla_sequential/task2_weighing/best'
+
+    # 进一步降低学习率
+    policy:
+      optimizer_lr: 0.00003  # 进一步降低至0.00003
+      scheduler_warmup_steps: 300
+      scheduler_decay_steps: 25000
+
+  # Replay配置
+  replay:
+    task1_episodes: 20  # 10% 任务1
+    task2_episodes: 40  # 20% 任务2
+    # 任务3占70%（由训练脚本自动计算）

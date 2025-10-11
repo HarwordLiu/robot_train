@@ -1,0 +1,44 @@
+# ==================== 任务4：全流程分拣 ====================
+
+# 任务基本信息
+task:
+  id: 4
+  name: "sorting"
+  stage: 4  # Stage 4: 最终多任务模型
+
+  # 任务描述（中文）
+  description: "机器人从指定起始点出发，移动至流利架前拾取工件，随后转身移动至放置架，将工件放置在物料筐内指定位置"
+
+  # Language Instruction（英文）
+  language_instruction: "Move from the starting point to the rack, pick up the workpiece, turn around, move to the placement rack, and place it in the designated position in the material container"
+
+  # 数据配置
+  data:
+    root: '/root/robot/data/task4/data/lerobot/1-400/'
+    repoid: 'lerobot/task4_sorting'
+    episodes_to_use: [0, 199]
+
+  # 训练配置
+  training:
+    max_epoch: 35  # 最复杂任务，最多epochs
+
+    # Stage 4: 从任务3的最佳checkpoint继续
+    resume_from: 'task'
+    resume_task_id: 3
+    resume_path: 'outputs/train/smolvla_sequential/task3_placement/best'
+
+    # 最低学习率（保持之前任务知识）
+    policy:
+      optimizer_lr: 0.00002  # 最低学习率0.00002
+      scheduler_warmup_steps: 200
+      scheduler_decay_steps: 30000
+
+  # Replay配置（最平衡的混合）
+  replay:
+    task1_episodes: 20  # 10% 任务1
+    task2_episodes: 20  # 10% 任务2
+    task3_episodes: 40  # 20% 任务3
+    # 任务4占60%（由训练脚本自动计算）
+
+# 任务4训练完成后，将获得最终的多任务模型
+# 该模型应该能够通过language instruction执行所有4个任务

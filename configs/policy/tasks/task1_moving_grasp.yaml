@@ -1,0 +1,36 @@
+# ==================== 任务1：移动目标抓取 ====================
+
+# 任务基本信息
+task:
+  id: 1
+  name: "moving_grasp"
+  stage: 1  # Stage 1: 从预训练模型开始
+
+  # 任务描述（中文）
+  description: "机器人从移动的传送带上抓取物体，放置于桌面后，再将其推送至指定区域内"
+
+  # Language Instruction（英文，SmolVLA使用）
+  # 这个instruction会在每个batch中作为任务条件输入模型
+  language_instruction: "Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area"
+
+  # 数据配置
+  data:
+    root: '/root/robot/data/task1/data/lerobot/1-400/'
+    repoid: 'lerobot/task1_moving_grasp'
+    episodes_to_use: [0, 199]  # 使用200个episodes
+
+  # 训练配置
+  training:
+    max_epoch: 20  # 任务1训练20个epochs
+
+    # Stage 1: 从HuggingFace预训练SmolVLA开始
+    resume_from: 'pretrained'
+    pretrained_path: 'lerobot/smolvla_base'  # HuggingFace官方预训练模型
+
+    # 优化器配置（任务1使用正常学习率）
+    policy:
+      optimizer_lr: 0.0001  # 标准学习率
+      scheduler_warmup_steps: 1000
+      scheduler_decay_steps: 15000
+
+# 任务1没有replay配置（因为是第一个任务）

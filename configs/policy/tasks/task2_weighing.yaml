@@ -1,0 +1,38 @@
+# ==================== 任务2：快递袋称重 ====================
+
+# 任务基本信息
+task:
+  id: 2
+  name: "weighing"
+  stage: 2  # Stage 2: 从任务1模型继续
+
+  # 任务描述（中文）
+  description: "机器人从移动的传送带上拾取快递袋，先放置在电子秤上完成称重，随后再次拾起并放入指定收纳筐中"
+
+  # Language Instruction（英文）
+  language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+
+  # 数据配置
+  data:
+    root: '/root/robot/data/task2/data/lerobot/1-400/'
+    repoid: 'lerobot/task2_weighing'
+    episodes_to_use: [0, 199]
+
+  # 训练配置
+  training:
+    max_epoch: 25  # 任务2可能需要更多epochs（称重动作更复杂）
+
+    # Stage 2: 从任务1的最佳checkpoint继续
+    resume_from: 'task'
+    resume_task_id: 1
+    resume_path: 'outputs/train/smolvla_sequential/task1_moving_grasp/best'
+
+    # 降低学习率（防遗忘策略）
+    policy:
+      optimizer_lr: 0.00005  # 减半至0.00005
+      scheduler_warmup_steps: 500   # 减少warmup
+      scheduler_decay_steps: 20000  # 延长decay
+
+  # Replay配置（防遗忘的关键）
+  replay:
+    task1_episodes: 40  # 从任务1回放40个episodes（约20%）
