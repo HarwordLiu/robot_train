@@ -161,16 +161,43 @@ class ReplayDatasetManager:
         return self.replay_datasets, self.replay_weights
 
 
+def pad_tensor_to_target_dim(tensor: torch.Tensor, target_dim: int) -> torch.Tensor:
+    """
+    将tensor从实际维度填充到目标维度
+
+    Args:
+        tensor: 输入tensor，形状为 [..., actual_dim]
+        target_dim: 目标维度
+
+    Returns:
+        填充后的tensor，形状为 [..., target_dim]
+    """
+    actual_dim = tensor.shape[-1]
+    if actual_dim == target_dim:
+        return tensor
+    elif actual_dim < target_dim:
+        # 填充0到目标维度
+        pad_size = target_dim - actual_dim
+        pad_shape = list(tensor.shape[:-1]) + [pad_size]
+        pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
+        return torch.cat([tensor, pad_tensor], dim=-1)
+    else:
+        # 截断到目标维度（不应该发生，但以防万一）
+        return tensor[..., :target_dim]
+
+
 def create_dataloader_with_language(
     dataset: LeRobotDataset,
     language_instruction: str,
     batch_size: int,
     num_workers: int,
     pin_memory: bool = True,
-    drop_last: bool = False
+    drop_last: bool = False,
+    target_action_dim: int = 32,
+    target_state_dim: int = 32
 ) -> DataLoader:
     """
-    创建包含language instruction的DataLoader
+    创建包含language instruction的DataLoader，并自动填充action/state维度
 
     Args:
         dataset: LeRobot数据集
@@ -179,13 +206,15 @@ def create_dataloader_with_language(
         num_workers: worker数量
         pin_memory: 是否pin memory
         drop_last: 是否丢弃最后一个batch
+        target_action_dim: 目标action维度（默认32，与SmolVLA预训练一致）
+        target_state_dim: 目标state维度（默认32，与SmolVLA预训练一致）
 
     Returns:
         DataLoader
     """
 
     def collate_fn_with_language(batch):
-        """为batch添加language instruction"""
+        """为batch添加language instruction并填充action/state维度"""
         # 使用默认collate
         from torch.utils.data._utils.collate import default_collate
         batch_dict = default_collate(batch)
@@ -193,6 +222,16 @@ def create_dataloader_with_language(
         # 添加task字段
         batch_size = batch_dict[list(batch_dict.keys())[0]].shape[0]
         batch_dict['task'] = [language_instruction] * batch_size
+
+        # 填充action和state维度（从Kuavo的16维到SmolVLA的32维）
+        for key in batch_dict.keys():
+            if isinstance(batch_dict[key], torch.Tensor):
+                if 'action' in key.lower():
+                    # 填充action维度
+                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_action_dim)
+                elif 'state' in key.lower() or 'observation.state' in key:
+                    # 填充state维度
+                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_state_dim)
 
         return batch_dict
 
@@ -322,6 +361,33 @@ def create_mixed_dataloader(
     print(f"📊 Mixed Dataset: {len(mixed_dataset)} frames (with replay)")
     print(f"   Weights: {mixed_dataset.weights}")
 
+    def collate_fn_with_padding(batch):
+        """collate函数：处理mixed dataset的batch并填充维度"""
+        from torch.utils.data._utils.collate import default_collate
+
+        # batch中的每个sample已经有'task'字段了
+        # 先提取所有非'task'字段进行collate
+        tasks = [sample.pop('task') for sample in batch]
+
+        # 使用默认collate处理其他字段
+        batch_dict = default_collate(batch)
+
+        # 添加task字段回去
+        batch_dict['task'] = tasks
+
+        # 填充action和state维度
+        target_action_dim = cfg.policy.max_action_dim
+        target_state_dim = cfg.policy.max_state_dim
+
+        for key in batch_dict.keys():
+            if isinstance(batch_dict[key], torch.Tensor):
+                if 'action' in key.lower():
+                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_action_dim)
+                elif 'state' in key.lower() or 'observation.state' in key:
+                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_state_dim)
+
+        return batch_dict
+
     return DataLoader(
         mixed_dataset,
         batch_size=cfg.training.batch_size,
@@ -329,6 +395,7 @@ def create_mixed_dataloader(
         shuffle=True,
         pin_memory=(cfg.training.device != 'cpu'),
         drop_last=cfg.training.drop_last,
+        collate_fn=collate_fn_with_padding,
         prefetch_factor=1
     )
 

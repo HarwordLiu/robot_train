@@ -31,15 +31,19 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         """
         super().__post_init__()
 
-        # 验证Kuavo双臂机器人的动作维度
-        if self.max_action_dim != 16:
-            print(
-                f"⚠️  Warning: max_action_dim is {self.max_action_dim}, expected 16 for Kuavo dual-arm robot")
+        # 注意：为了使用SmolVLA预训练权重，max_action_dim和max_state_dim应该为32（与预训练模型一致）
+        # Kuavo实际是16维，数据会在加载时自动填充到32维
+        if self.max_action_dim == 32 and self.max_state_dim == 32:
+            print("✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
+        elif self.max_action_dim != 32 or self.max_state_dim != 32:
+            print(f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
+            print(f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
 
         # 打印SmolVLA配置摘要
         print(f"📋 SmolVLA Config Summary (Kuavo):")
         print(f"   - VLM Model: {self.vlm_model_name}")
-        print(f"   - Max Action Dim: {self.max_action_dim}")
+        print(f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
+        print(f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
         print(f"   - Chunk Size: {self.chunk_size}")
         print(f"   - Action Steps: {self.n_action_steps}")
         print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
