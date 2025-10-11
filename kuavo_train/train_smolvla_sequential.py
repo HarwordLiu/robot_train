@@ -500,6 +500,21 @@ def main(cfg: DictConfig):
     output_features = {k: ft for k,
                        ft in features.items() if ft.type is FeatureType.ACTION}
 
+    # 适配动作维度：修改output_features以匹配目标动作维度
+    target_action_dim = cfg.training.target_action_dim
+    for key, feature in output_features.items():
+        if hasattr(feature, 'shape') and len(feature.shape) > 0:
+            # 修改动作特征的维度
+            if feature.shape[-1] == 16 and target_action_dim > 16:
+                print(
+                    f"🔧 Adapting {key} feature dimension: {feature.shape} -> {target_action_dim}")
+                # 创建新的特征对象，保持其他属性不变
+                from copy import deepcopy
+                new_feature = deepcopy(feature)
+                new_feature.shape = list(
+                    feature.shape[:-1]) + [target_action_dim]
+                output_features[key] = new_feature
+
     dataset_stats = dataset_metadata.stats
 
     # ==================== 构建Policy配置 ====================
