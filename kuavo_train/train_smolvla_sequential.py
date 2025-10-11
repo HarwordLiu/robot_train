@@ -451,8 +451,8 @@ def main(cfg: DictConfig):
     print("="*70)
     print(f"Task ID: {task_id}")
     print(f"Task Name: {task_name}")
-    print(f"Description: {task_cfg.description}")
-    print(f"Language: {task_cfg.language_instruction}")
+    print(f"Description: {task_cfg.task.description}")
+    print(f"Language: {task_cfg.task.language_instruction}")
     print("="*70 + "\n")
 
     # 设置输出目录
@@ -466,8 +466,8 @@ def main(cfg: DictConfig):
     # ==================== 加载数据集元信息 ====================
     print("📂 Loading Dataset Metadata...")
     dataset_metadata = LeRobotDatasetMetadata(
-        task_cfg.data.repoid,
-        root=task_cfg.data.root
+        task_cfg.task.data.repoid,
+        root=task_cfg.task.data.root
     )
 
     # 构建features
@@ -490,26 +490,26 @@ def main(cfg: DictConfig):
     )
 
     # Override learning rate from task config
-    if hasattr(task_cfg.training, 'policy'):
-        policy_cfg.optimizer_lr = task_cfg.training.policy.optimizer_lr
-        policy_cfg.scheduler_warmup_steps = task_cfg.training.policy.scheduler_warmup_steps
-        policy_cfg.scheduler_decay_steps = task_cfg.training.policy.scheduler_decay_steps
+    if hasattr(task_cfg.task.training, 'policy'):
+        policy_cfg.optimizer_lr = task_cfg.task.training.policy.optimizer_lr
+        policy_cfg.scheduler_warmup_steps = task_cfg.task.training.policy.scheduler_warmup_steps
+        policy_cfg.scheduler_decay_steps = task_cfg.task.training.policy.scheduler_decay_steps
 
     # ==================== 加载/创建模型 ====================
-    if task_cfg.training.resume_from == 'pretrained':
+    if task_cfg.task.training.resume_from == 'pretrained':
         # Stage 1: 从HuggingFace预训练加载
         print(
-            f"\n📂 Loading pretrained SmolVLA from {task_cfg.training.pretrained_path}")
+            f"\n📂 Loading pretrained SmolVLA from {task_cfg.task.training.pretrained_path}")
         policy = SmolVLAPolicyWrapper.from_pretrained(
-            task_cfg.training.pretrained_path,
+            task_cfg.task.training.pretrained_path,
             config=policy_cfg,
             dataset_stats=dataset_stats
         )
 
-    elif task_cfg.training.resume_from == 'task':
+    elif task_cfg.task.training.resume_from == 'task':
         # Stage 2+: 从上一个任务继续
-        prev_task_id = task_cfg.training.resume_task_id
-        resume_path = task_cfg.training.resume_path
+        prev_task_id = task_cfg.task.training.resume_task_id
+        resume_path = task_cfg.task.training.resume_path
 
         print(f"\n📂 Loading from Task {prev_task_id}: {resume_path}")
         policy = SmolVLAPolicyWrapper.from_pretrained(
@@ -543,15 +543,16 @@ def main(cfg: DictConfig):
     optimizer = policy.config.get_optimizer_preset().build(policy.parameters())
     lr_scheduler = policy.config.get_scheduler_preset().build(
         optimizer,
-        num_training_steps=task_cfg.training.max_epoch * len(dataloader)
+        num_training_steps=task_cfg.task.training.max_epoch * len(dataloader)
     )
 
     print(f"\n🎯 Training Configuration:")
-    print(f"   Epochs: {task_cfg.training.max_epoch}")
+    print(f"   Epochs: {task_cfg.task.training.max_epoch}")
     print(f"   Batch Size: {cfg.training.batch_size}")
     print(f"   Learning Rate: {policy_cfg.optimizer_lr}")
     print(f"   Steps per Epoch: {len(dataloader)}")
-    print(f"   Total Steps: {task_cfg.training.max_epoch * len(dataloader)}")
+    print(
+        f"   Total Steps: {task_cfg.task.training.max_epoch * len(dataloader)}")
 
     # ==================== 训练循环 ====================
     print("\n🚀 Starting Training...")
@@ -559,9 +560,9 @@ def main(cfg: DictConfig):
 
     best_loss = float('inf')
 
-    for epoch in range(task_cfg.training.max_epoch):
+    for epoch in range(task_cfg.task.training.max_epoch):
         print(f"\n{'='*70}")
-        print(f"Epoch {epoch + 1}/{task_cfg.training.max_epoch}")
+        print(f"Epoch {epoch + 1}/{task_cfg.task.training.max_epoch}")
         print(f"{'='*70}")
 
         # 训练
@@ -653,11 +654,11 @@ def main(cfg: DictConfig):
         json.dump({
             'task_id': task_id,
             'task_name': task_name,
-            'description': task_cfg.description,
-            'language_instruction': task_cfg.language_instruction,
+            'description': task_cfg.task.description,
+            'language_instruction': task_cfg.task.language_instruction,
             'best_loss': best_loss,
             'final_validation': {str(k): v for k, v in final_results.items()},
-            'training_epochs': task_cfg.training.max_epoch,
+            'training_epochs': task_cfg.task.training.max_epoch,
             'learning_rate': policy_cfg.optimizer_lr,
         }, f, indent=2)
 
