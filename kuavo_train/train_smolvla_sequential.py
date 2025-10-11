@@ -591,11 +591,12 @@ def main(cfg: DictConfig):
                 # 创建新的状态投影层
                 new_state_proj = torch.nn.Linear(
                     state_proj.in_features, policy.config.max_action_dim)
-                # 复制原有权重
-                new_state_proj.weight.data[:16] = state_proj.weight.data
+                # 复制原有权重（正确的维度）
+                new_state_proj.weight.data[:, :16] = state_proj.weight.data
                 new_state_proj.bias.data[:16] = state_proj.bias.data
                 # 随机初始化新增部分
-                torch.nn.init.normal_(new_state_proj.weight.data[16:], 0, 0.01)
+                torch.nn.init.normal_(
+                    new_state_proj.weight.data[:, 16:], 0, 0.01)
                 torch.nn.init.zeros_(new_state_proj.bias.data[16:])
                 # 替换层
                 policy.model.state_proj = new_state_proj
