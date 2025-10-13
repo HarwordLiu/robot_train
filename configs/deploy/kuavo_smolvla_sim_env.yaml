@@ -75,17 +75,17 @@ device: 'cuda' # or "cpu"
 #   - task2_weighing: Package weighing
 #   - task3_placement: Daily chemical product placement
 #   - task4_sorting: Full process sorting
-task: 'smolvla_sequential/task1_moving_grasp'
+task: 'task1_moving_grasp'
 method: 'smolvla_sequential'
-timestamp: 'run_20251011_100000' # Change to your training timestamp
-epoch: 'best' # or specific epoch number like 10, 20
+timestamp: 'run_20251013_065201' # Your actual training timestamp
+epoch: 10 # Test epoch 10 model (loss ~0.02)
 
 # ==================== Language Instruction Configuration ====================
 # SmolVLA uses language instructions to condition the policy
 # Change this based on which task you're evaluating
 
 # Task 1: Moving target grasping
-language_instruction: "Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area"
+language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
 
 # Task 2: Package weighing (uncomment to use)
 # language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
@@ -106,19 +106,19 @@ multi_task_eval: false # Set to true to evaluate all tasks
 tasks_to_evaluate:
   - task_id: 1
     task_name: 'task1_moving_grasp'
-    language_instruction: "Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area"
+    language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
     episodes: 10
   - task_id: 2
     task_name: 'task2_weighing'
-    language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+    language_instruction: 'Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container'
     episodes: 10
   - task_id: 3
     task_name: 'task3_placement'
-    language_instruction: "Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up"
+    language_instruction: 'Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up'
     episodes: 10
   - task_id: 4
     task_name: 'task4_sorting'
-    language_instruction: "Move from the starting position, pick up the workpiece, move to the designated location and place it precisely"
+    language_instruction: 'Move from the starting position, pick up the workpiece, move to the designated location and place it precisely'
     episodes: 10
 
 # ==================== Environment Configuration ====================
