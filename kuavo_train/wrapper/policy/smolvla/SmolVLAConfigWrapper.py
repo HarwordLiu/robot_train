@@ -5,6 +5,9 @@ SmolVLA Configuration Wrapper for Kuavo Project
 """
 
 from dataclasses import dataclass, fields
+from pathlib import Path
+from copy import deepcopy
+import torch
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.configs.policies import PreTrainedConfig, PolicyFeature
 
@@ -109,3 +112,29 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         print(f"   - Action Steps: {self.n_action_steps}")
         print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
         print(f"   - Train Expert Only: {self.train_expert_only}")
+
+    def _save_pretrained(self, save_directory: Path) -> None:
+        """
+        保存配置到指定目录
+
+        在保存前，将不能被 JSON 序列化的对象（如 torch.device）转换为可序列化格式。
+
+        Args:
+            save_directory: 保存目录路径
+        """
+        import draccus
+        from lerobot.configs.policies import CONFIG_NAME
+
+        # 创建深拷贝以避免修改原始配置
+        cfg_copy = deepcopy(self)
+
+        # 将 torch.device 转换为字符串
+        if hasattr(cfg_copy, 'device') and isinstance(cfg_copy.device, torch.device):
+            cfg_copy.device = str(cfg_copy.device)
+
+        # 使用 draccus 保存配置
+        save_directory = Path(save_directory)
+        save_directory.mkdir(parents=True, exist_ok=True)
+
+        with open(save_directory / CONFIG_NAME, "w") as f, draccus.config_type("json"):
+            draccus.dump(cfg_copy, f, indent=4)
