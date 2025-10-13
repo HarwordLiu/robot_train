@@ -145,6 +145,58 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         # 调用父类select_action
         return super().select_action(batch, noise)
 
+    @staticmethod
+    def _create_identity_stats(config: SmolVLAConfig) -> Dict[str, Dict[str, torch.Tensor]]:
+        """
+        创建"空"的dataset_stats，使归一化成为恒等变换
+        
+        对于每个feature：
+        - mean = 0（减去0不改变数据）
+        - std = 1（除以1不改变数据）
+        
+        注意：对于 state 和 action，使用 max_state_dim 和 max_action_dim（32维）
+        而不是实际的维度（16维），以匹配训练时的填充维度。
+        
+        Args:
+            config: SmolVLA配置对象
+            
+        Returns:
+            包含所有features的identity stats字典
+        """
+        stats = {}
+        
+        # 处理input features（observations）
+        for key, feature in config.input_features.items():
+            shape = feature.shape
+            
+            # 对于state，使用max_state_dim而不是实际维度
+            if 'state' in key.lower():
+                shape = (config.max_state_dim,)
+            
+            stats[key] = {
+                'mean': torch.zeros(shape, dtype=torch.float32),
+                'std': torch.ones(shape, dtype=torch.float32),
+                'min': torch.zeros(shape, dtype=torch.float32),
+                'max': torch.ones(shape, dtype=torch.float32),
+            }
+        
+        # 处理output features（actions）
+        for key, feature in config.output_features.items():
+            shape = feature.shape
+            
+            # 对于action，使用max_action_dim而不是实际维度
+            if 'action' in key.lower():
+                shape = (config.max_action_dim,)
+            
+            stats[key] = {
+                'mean': torch.zeros(shape, dtype=torch.float32),
+                'std': torch.ones(shape, dtype=torch.float32),
+                'min': torch.zeros(shape, dtype=torch.float32),
+                'max': torch.ones(shape, dtype=torch.float32),
+            }
+        
+        return stats
+
     @classmethod
     def from_pretrained(
         cls,
@@ -176,6 +228,12 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
             config = SmolVLAConfigWrapper.from_pretrained(
                 pretrained_name_or_path)
 
+        # 如果没有提供dataset_stats，创建临时的identity stats用于初始化
+        # 真实的归一化参数会从checkpoint中加载
+        if dataset_stats is None:
+            print("⚠️  No dataset_stats provided. Will load normalization params from checkpoint.")
+            dataset_stats = cls._create_identity_stats(config)
+
         # 创建模型实例
         model = cls(config, dataset_stats)
 
@@ -185,14 +243,28 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
             # 本地checkpoint
             model_file = pretrained_path / "model.safetensors"
             if model_file.exists():
-                from lerobot.policies.smolvla.modeling_smolvla import load_smolvla
-                model = load_smolvla(
-                    model,
-                    str(model_file),
-                    device='cpu',
-                    checkpoint_keys_mapping="model._orig_mod.//model."
-                )
-                print(f"✅ Loaded weights from local checkpoint")
+                # 加载完整的 state_dict（包括归一化参数）
+                from safetensors.torch import load_file
+                full_state_dict = load_file(str(model_file))
+                
+                # 分离归一化参数和模型参数
+                norm_keys = ("normalize_inputs", "normalize_targets", "unnormalize_outputs")
+                norm_state_dict = {k: v for k, v in full_state_dict.items() if k.startswith(norm_keys)}
+                model_state_dict = {k: v for k, v in full_state_dict.items() if not k.startswith(norm_keys)}
+                
+                # 先加载模型参数（不包括归一化）
+                missing, unexpected = model.load_state_dict(model_state_dict, strict=False)
+                print(f"✅ Loaded model weights from local checkpoint")
+                
+                # 再加载归一化参数（如果存在）
+                if norm_state_dict:
+                    model.load_state_dict(norm_state_dict, strict=False)
+                    print(f"✅ Loaded normalization parameters from checkpoint")
+                    print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_inputs' in k])} input norm params")
+                    print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_targets' in k])} target norm params")
+                    print(f"   - {len([k for k in norm_state_dict.keys() if 'unnormalize_outputs' in k])} unnorm params")
+                else:
+                    print(f"⚠️  No normalization parameters found in checkpoint. Using identity normalization.")
             else:
                 print(f"⚠️  Model file not found: {model_file}")
         else:
