@@ -68,12 +68,12 @@ policy:
   # 优化器基础配置（各任务会override学习率）
   optimizer_betas: [0.9, 0.95]
   optimizer_eps: 1.0e-08
-  optimizer_weight_decay: 1.0e-10
-  optimizer_grad_clip_norm: 10
+  optimizer_weight_decay: 1.0e-6  # VLM需要正则化防止过拟合
+  optimizer_grad_clip_norm: 1.0  # VLM embedding空间大，需要严格梯度控制
 
   # 学习率调度器配置（各任务会override）
-  scheduler_warmup_steps: 1000
-  scheduler_decay_steps: 15000
+  scheduler_warmup_steps: 1500  # VLM+Action Expert异构架构需要更长warmup
+  scheduler_decay_steps: 20000
   scheduler_decay_lr: 2.5e-6
 
 # ==================== 训练基础配置 ====================
@@ -86,18 +86,18 @@ training:
   target_action_dim: 32 # 目标动作维度（与预训练模型一致）
 
   # 数据加载
-  batch_size: 64 # 如果内存仍不足，从32降到16（可进一步降至8）
-  num_workers: 20 # 减少worker数量，防止内存爆炸（可进一步降至0）
-  drop_last: False
+  batch_size: 32  # VLM模仿学习最优batch size，平衡收敛速度和泛化性能
+  num_workers: 20  # 保持不变
+  drop_last: True  # 保证每个batch大小一致，避免BN层统计偏差
 
   # 日志和保存
-  save_freq_epoch: 5
+  save_freq_epoch: 2  # 更频繁保存，避免丢失好的checkpoint
   log_freq: 10
 
   # 多任务验证配置（防遗忘的关键）
   validate_all_previous_tasks: True
   validation_freq_epoch: 2 # 每2个epoch验证所有之前的任务
-  validation_episodes: 10 # 每个任务用10个episodes做验证
+  validation_episodes: 20 # 更多验证episodes，评估更准确
 
 # ==================== 顺序训练策略配置 ====================
 sequential:

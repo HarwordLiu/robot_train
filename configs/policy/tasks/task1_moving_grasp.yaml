@@ -28,9 +28,9 @@ task:
     resume_from: 'pretrained'
     pretrained_path: 'lerobot/smolvla_base' # 使用镜像源下载的预训练模型
 
-    # 优化器配置（任务1使用正常学习率）
+    # 优化器配置（任务1使用标准学习率）
     policy:
-      optimizer_lr: 0.0001 # 标准学习率
-      scheduler_warmup_steps: 1000
-      scheduler_decay_steps: 15000
+      optimizer_lr: 0.0001 # 标准VLM fine-tuning学习率
+      scheduler_warmup_steps: 1500  # VLM需要更长warmup
+      scheduler_decay_steps: 20000
 # 任务1没有replay配置（因为是第一个任务）
