@@ -31,6 +31,6 @@ task:
     # 优化器配置（任务1使用标准学习率）
     policy:
       optimizer_lr: 0.0001 # 标准VLM fine-tuning学习率
-      scheduler_warmup_steps: 1500  # VLM需要更长warmup
-      scheduler_decay_steps: 20000
+      scheduler_warmup_steps: 2000  # VLM需要更长warmup
+      scheduler_decay_steps: 30000
 # 任务1没有replay配置（因为是第一个任务）
