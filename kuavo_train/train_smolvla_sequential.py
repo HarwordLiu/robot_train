@@ -58,6 +58,9 @@ from lerobot.configs.types import FeatureType
 from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
 from kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper import SmolVLAConfigWrapper
 
+# 导入训练状态保存/加载工具
+from kuavo_train.utils.utils import save_rng_state, load_rng_state
+
 
 def setup_logging():
     """设置日志系统"""
@@ -885,15 +888,53 @@ def main(cfg: DictConfig):
             best_loss = avg_loss
             best_path = output_directory / "best"
             policy.save_pretrained(best_path)
+            save_rng_state(best_path / "rng_state.pth")
+
+            # 保存训练状态（用于完美恢复训练）
+            checkpoint = {
+                "optimizer": optimizer.state_dict(),
+                "lr_scheduler": lr_scheduler.state_dict(),
+                "epoch": epoch + 1,
+                "best_loss": best_loss
+            }
+            torch.save(checkpoint, best_path / "learning_state.pth")
+
             print(f"✅ Best model saved: loss={best_loss:.4f}")
 
         # 定期保存
         if (epoch + 1) % cfg.training.save_freq_epoch == 0:
             epoch_path = output_directory / f"epoch{epoch+1}"
             policy.save_pretrained(epoch_path)
+            save_rng_state(epoch_path / "rng_state.pth")
+
+            # 保存训练状态
+            checkpoint = {
+                "optimizer": optimizer.state_dict(),
+                "lr_scheduler": lr_scheduler.state_dict(),
+                "epoch": epoch + 1,
+                "best_loss": best_loss
+            }
+            torch.save(checkpoint, epoch_path / "learning_state.pth")
+
             print(f"✅ Checkpoint saved: epoch {epoch+1}")
 
     writer.close()
+
+    # ==================== 保存最终状态 ====================
+    # 保存最终模型和训练状态（用于完美恢复或继续训练）
+    print("\n💾 Saving final model and training state...")
+    policy.save_pretrained(output_directory)
+    save_rng_state(output_directory / "rng_state.pth")
+
+    # 保存最终训练状态
+    final_checkpoint = {
+        "optimizer": optimizer.state_dict(),
+        "lr_scheduler": lr_scheduler.state_dict(),
+        "epoch": task_cfg.task.training.max_epoch,
+        "best_loss": best_loss
+    }
+    torch.save(final_checkpoint, output_directory / "learning_state.pth")
+    print("✅ Final model and training state saved")
 
     # ==================== 最终验证 ====================
     print("\n" + "="*70)
