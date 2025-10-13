@@ -144,6 +144,44 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         # 调用父类select_action
         return super().select_action(batch, noise)
+    
+    def _get_action_chunk(self, batch: dict[str, torch.Tensor], noise: torch.Tensor | None = None) -> torch.Tensor:
+        """
+        重写父类方法以修复维度不匹配问题
+        
+        正确的顺序：
+        1. 模型预测（输出32D归一化的动作）
+        2. 用32D参数反归一化
+        3. 裁剪到16D（Kuavo实际维度）
+        
+        父类的实现顺序错误（先裁剪再反归一化），导致维度不匹配。
+        """
+        from lerobot.constants import ACTION
+        
+        # Copy queues so that we don't modify the originals
+        for k in batch:
+            if k in self._queues and k != ACTION:
+                batch[k] = torch.stack(list(self._queues[k]), dim=1)
+
+        # 准备输入
+        images, img_masks = self.prepare_images(batch)
+        state = self.prepare_state(batch)
+        lang_tokens, lang_masks = self.prepare_language(batch)
+
+        # 模型采样（输出32D归一化的动作）
+        actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+        
+        # 先在32D空间反归一化（使用32D的mean/std）
+        actions = self.unnormalize_outputs({ACTION: actions})[ACTION]
+        
+        # 然后裁剪到原始维度（16D）
+        original_action_dim = self.config.action_feature.shape[0]
+        actions = actions[:, :, :original_action_dim]
+        
+        if self.config.adapt_to_pi_aloha:
+            actions = self._pi_aloha_encode_actions(actions)
+        
+        return actions
 
     @staticmethod
     def _create_identity_stats(config: SmolVLAConfig) -> Dict[str, Dict[str, torch.Tensor]]:
