@@ -7,9 +7,12 @@ SmolVLA Configuration Wrapper for Kuavo Project
 from dataclasses import dataclass, fields
 from pathlib import Path
 from copy import deepcopy
+from typing import TypeVar
 import torch
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.configs.policies import PreTrainedConfig, PolicyFeature
+
+T = TypeVar("T", bound="SmolVLAConfigWrapper")
 
 
 @PreTrainedConfig.register_subclass("smolvla_kuavo")
@@ -138,3 +141,44 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
 
         with open(save_directory / CONFIG_NAME, "w") as f, draccus.config_type("json"):
             draccus.dump(cfg_copy, f, indent=4)
+
+    @classmethod
+    def from_pretrained(
+        cls: type[T],
+        pretrained_name_or_path: str | Path,
+        *,
+        force_download: bool = False,
+        resume_download: bool = None,
+        proxies: dict | None = None,
+        token: str | bool | None = None,
+        cache_dir: str | Path | None = None,
+        local_files_only: bool = False,
+        revision: str | None = None,
+        **policy_kwargs,
+    ) -> T:
+        """
+        从预训练路径加载配置
+
+        这个方法调用父类的 from_pretrained，确保正确处理配置文件中的 type 字段。
+        
+        Args:
+            pretrained_name_or_path: 预训练模型路径或 HuggingFace 模型 ID
+            其他参数同 PreTrainedConfig.from_pretrained
+            
+        Returns:
+            加载的配置对象
+        """
+        # 调用父类 PreTrainedConfig 的 from_pretrained，触发 Choice 机制识别子类
+        parent_cls = PreTrainedConfig
+        
+        return parent_cls.from_pretrained(
+            pretrained_name_or_path,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
+            token=token,
+            cache_dir=cache_dir,
+            local_files_only=local_files_only,
+            revision=revision,
+            **policy_kwargs,
+        )
