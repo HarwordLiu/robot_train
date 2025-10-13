@@ -225,56 +225,17 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         Args:
             save_directory: 保存目录路径
+
+        注意：依赖 SmolVLAConfigWrapper 已将所有 OmegaConf 对象转换为原生 Python 对象，
+        因此可以直接使用 lerobot 的标准保存方式。
         """
         save_directory = Path(save_directory)
         save_directory.mkdir(parents=True, exist_ok=True)
 
         print(f"💾 Saving SmolVLA model to {save_directory}")
 
-        # 保存配置（需要处理DictConfig对象）
-        try:
-            # 尝试直接保存
-            self.config._save_pretrained(save_directory)
-        except (TypeError, AttributeError):
-            # 如果失败，说明config中有DictConfig对象，需要转换
-            print(f"⚠️  Config contains OmegaConf objects, converting to plain dict...")
-
-            from omegaconf import OmegaConf, DictConfig, ListConfig
-            from dataclasses import fields
-            import json
-
-            # 创建config的深拷贝
-            config_dict = {}
-            for field in fields(self.config):
-                value = getattr(self.config, field.name)
-
-                # 将OmegaConf对象转换为普通Python对象
-                if isinstance(value, (DictConfig, ListConfig)):
-                    config_dict[field.name] = OmegaConf.to_container(value, resolve=True)
-                else:
-                    config_dict[field.name] = value
-
-            # 手动保存config.json
-            config_file = save_directory / "config.json"
-
-            # 准备可序列化的config dict
-            serializable_dict = {}
-            for key, value in config_dict.items():
-                try:
-                    # 测试是否可序列化
-                    json.dumps(value)
-                    serializable_dict[key] = value
-                except (TypeError, ValueError):
-                    # 如果不能序列化，转换为字符串
-                    serializable_dict[key] = str(value)
-
-            # 添加必要的元数据
-            serializable_dict['_target_'] = f"{self.config.__class__.__module__}.{self.config.__class__.__name__}"
-
-            with open(config_file, 'w') as f:
-                json.dump(serializable_dict, f, indent=2)
-
-            print(f"✅ Config saved (with OmegaConf conversion)")
+        # 保存配置（使用 lerobot 标准方式）
+        self.config._save_pretrained(save_directory)
 
         # 保存模型权重
         from safetensors.torch import save_file
