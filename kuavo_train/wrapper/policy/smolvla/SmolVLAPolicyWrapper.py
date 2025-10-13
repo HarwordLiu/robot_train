@@ -260,6 +260,10 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
             # 准备可序列化的config dict
             serializable_dict = {}
             for key, value in config_dict.items():
+                # 过滤掉Hydra相关的字段（_target_, _recursive_等）
+                if key.startswith('_'):
+                    continue
+
                 try:
                     # 测试是否可序列化
                     json.dumps(value)
@@ -267,9 +271,6 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                 except (TypeError, ValueError):
                     # 如果不能序列化，转换为字符串
                     serializable_dict[key] = str(value)
-
-            # 添加必要的元数据
-            serializable_dict['_target_'] = f"{self.config.__class__.__module__}.{self.config.__class__.__name__}"
 
             with open(config_file, 'w') as f:
                 json.dump(serializable_dict, f, indent=2)
