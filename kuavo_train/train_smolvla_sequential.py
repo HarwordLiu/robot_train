@@ -573,10 +573,20 @@ def validate_all_tasks(
         # 加载任务配置
         task_cfg = load_task_config(cfg_root, task_id)
 
-        # 加载验证集（使用最后N个episodes）
+        # 加载验证集（使用前N个episodes作为验证，避免与训练数据完全分离）
+        # 注意：这是快速验证方法，使用训练数据的子集
         num_val_episodes = cfg.training.validation_episodes
-        total_episodes = task_cfg.task.data.episodes_to_use[1] + 1
-        val_start = max(0, total_episodes - num_val_episodes)
+
+        # 从训练episodes中选择前N个作为验证
+        train_episode_start = task_cfg.task.data.episodes_to_use[0]
+        train_episode_end = task_cfg.task.data.episodes_to_use[1]
+
+        # 验证用前N个episodes
+        val_episode_end = min(train_episode_start + num_val_episodes - 1, train_episode_end)
+        val_episodes = list(range(train_episode_start, val_episode_end + 1))
+
+        # 确保不超过num_val_episodes
+        val_episodes = val_episodes[:num_val_episodes]
 
         # 构建delta_timestamps配置
         chunk_size = cfg.policy.chunk_size
@@ -588,7 +598,7 @@ def validate_all_tasks(
         val_dataset = LeRobotDataset(
             task_cfg.task.data.repoid,
             root=task_cfg.task.data.root,
-            episodes=list(range(val_start, total_episodes)),
+            episodes=val_episodes,
             delta_timestamps=delta_timestamps
         )
 
