@@ -18,11 +18,11 @@ task:
     root: '/root/robot/data/task-1/1-2000/lerobot/'
     # root: '/mnt/e/robot/data/data/task1/lerobot/1-400/'
     repoid: 'lerobot/task1_moving_grasp'
-    episodes_to_use: [0, 199] # 使用200个episodes
+    episodes_to_use: [0, 500] # 使用1000个episodes
 
   # 训练配置
   training:
-    max_epoch: 20 # 任务1训练20个epochs
+    max_epoch: 100 # 任务1训练100个epochs
 
     # Stage 1: 从HuggingFace预训练SmolVLA开始
     resume_from: 'pretrained'
