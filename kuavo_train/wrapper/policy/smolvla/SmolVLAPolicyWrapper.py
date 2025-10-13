@@ -235,13 +235,13 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         try:
             # 尝试直接保存
             self.config._save_pretrained(save_directory)
-        except (TypeError, AttributeError) as e:
+        except (TypeError, AttributeError):
             # 如果失败，说明config中有DictConfig对象，需要转换
             print(f"⚠️  Config contains OmegaConf objects, converting to plain dict...")
 
             from omegaconf import OmegaConf, DictConfig, ListConfig
-            from dataclasses import asdict, fields
-            import copy
+            from dataclasses import fields
+            import json
 
             # 创建config的深拷贝
             config_dict = {}
@@ -255,7 +255,6 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                     config_dict[field.name] = value
 
             # 手动保存config.json
-            import json
             config_file = save_directory / "config.json"
 
             # 准备可序列化的config dict
