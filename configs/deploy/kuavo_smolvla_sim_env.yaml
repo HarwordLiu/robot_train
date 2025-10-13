@@ -78,7 +78,7 @@ device: 'cuda' # or "cpu"
 task: 'task1_moving_grasp'
 method: 'smolvla_sequential'
 timestamp: 'run_20251013_142526' # Your actual training timestamp
-epoch: 10 # Test epoch 10 model (loss ~0.02)
+epoch: 4 # Test epoch 10 model (loss ~0.02)
 
 # ==================== Language Instruction Configuration ====================
 # SmolVLA uses language instructions to condition the policy
