@@ -6,7 +6,7 @@ SmolVLA Configuration Wrapper for Kuavo Project
 
 from dataclasses import dataclass, fields
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
-from lerobot.configs.policies import PreTrainedConfig
+from lerobot.configs.policies import PreTrainedConfig, PolicyFeature
 
 
 @PreTrainedConfig.register_subclass("smolvla_kuavo")
@@ -49,18 +49,47 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
                 native_value = OmegaConf.to_container(value, resolve=True)
                 setattr(self, field.name, native_value)
 
+    def _normalize_feature_dict(self, d):
+        """
+        将字典格式的 features 转换为 PolicyFeature 对象
+
+        当 OmegaConf 配置被转换为原生 Python 对象后，input_features 和 output_features 
+        会变成字典，需要重新转换为 PolicyFeature 对象以供策略模型使用。
+
+        Args:
+            d: 字典或包含字典的字典
+
+        Returns:
+            包含 PolicyFeature 对象的字典
+        """
+        if not isinstance(d, dict):
+            return d
+
+        return {
+            k: PolicyFeature(**v) if isinstance(v, dict) and not isinstance(v, PolicyFeature) else v
+            for k, v in d.items()
+        }
+
     def __post_init__(self):
         """
         后初始化处理
 
         1. 首先转换所有 OmegaConf 对象为原生 Python 对象
-        2. 然后执行父类的验证逻辑
-        3. 最后执行 Kuavo 特定的配置验证
+        2. 重新将 input_features 和 output_features 转换为 PolicyFeature 对象
+        3. 然后执行父类的验证逻辑
+        4. 最后执行 Kuavo 特定的配置验证
         """
         # 第一步：转换 OmegaConf 对象（必须在父类 __post_init__ 之前）
         self._convert_omegaconf_to_native()
 
-        # 第二步：调用父类的后初始化
+        # 第二步：重新将 features 转换为 PolicyFeature 对象
+        # 这是必要的，因为 _convert_omegaconf_to_native 会将它们转换为字典
+        if hasattr(self, 'input_features') and self.input_features is not None:
+            self.input_features = self._normalize_feature_dict(self.input_features)
+        if hasattr(self, 'output_features') and self.output_features is not None:
+            self.output_features = self._normalize_feature_dict(self.output_features)
+
+        # 第三步：调用父类的后初始化
         super().__post_init__()
 
         # 注意：为了使用SmolVLA预训练权重，max_action_dim和max_state_dim应该为32（与预训练模型一致）
