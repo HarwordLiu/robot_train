@@ -16,8 +16,9 @@ hydra:
 timestamp: ${now:%Y%m%d_%H%M%S}
 method: 'smolvla_sequential'
 
-# 任务配置字段（Hydra需要这个字段才能进行覆盖）
-task: tasks/task1_moving_grasp
+# 任务配置字段（Hydra会从task config中读取）
+# 格式: task1_moving_grasp, task2_weighing, task3_placement, task4_sorting
+task: 'task1_moving_grasp'  # 默认任务1，会被任务配置覆盖
 
 # ==================== SmolVLA策略配置 ====================
 policy_name: smolvla
@@ -77,7 +78,7 @@ policy:
 
 # ==================== 训练基础配置 ====================
 training:
-  output_directory: 'outputs/train/smolvla_sequential'
+  output_directory: 'outputs/train/${task}/${method}'  # 与其他策略一致的路径格式
   device: 'cuda'
   seed: 42
 

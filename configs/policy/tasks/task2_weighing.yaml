@@ -23,9 +23,11 @@ task:
     max_epoch: 25  # 任务2可能需要更多epochs（称重动作更复杂）
 
     # Stage 2: 从任务1的最佳checkpoint继续
+    # 格式: outputs/train/{task}/{method}/run_{timestamp}/best
+    # 需要手动指定任务1的timestamp！
     resume_from: 'task'
     resume_task_id: 1
-    resume_path: 'outputs/train/smolvla_sequential/task1_moving_grasp/best'
+    resume_path: 'outputs/train/task1_moving_grasp/smolvla_sequential/run_XXXXXX_XXXXXX/best'  # 修改XXXXXX为实际timestamp
 
     # 降低学习率（防遗忘策略）
     policy:

@@ -23,9 +23,11 @@ task:
     max_epoch: 30  # 任务3最复杂，需要更多epochs
 
     # Stage 3: 从任务2的最佳checkpoint继续
+    # 格式: outputs/train/{task}/{method}/run_{timestamp}/best
+    # 需要手动指定任务2的timestamp！
     resume_from: 'task'
     resume_task_id: 2
-    resume_path: 'outputs/train/smolvla_sequential/task2_weighing/best'
+    resume_path: 'outputs/train/task2_weighing/smolvla_sequential/run_XXXXXX_XXXXXX/best'  # 修改XXXXXX为实际timestamp
 
     # 进一步降低学习率
     policy:

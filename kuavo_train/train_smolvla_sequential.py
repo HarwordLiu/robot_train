@@ -33,6 +33,9 @@ SmolVLA顺序多任务训练脚本
 import lerobot_patches.custom_patches
 
 import os
+# 消除tokenizers fork警告
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
@@ -655,17 +658,20 @@ def main(cfg: DictConfig):
     set_seed(cfg.training.seed)
 
     # 加载任务配置
-    # 从Hydra配置获取任务名称
-    task_name = cfg.get('task', 'tasks/task1_moving_grasp')
-    if task_name.startswith('tasks/'):
-        task_name = task_name.replace('tasks/', '')
+    # 从Hydra配置获取任务名称（支持两种格式：tasks/task1_moving_grasp 或 task1_moving_grasp）
+    task_param = cfg.get('task', 'task1_moving_grasp')
+    if task_param.startswith('tasks/'):
+        task_param = task_param.replace('tasks/', '')
 
     # 动态加载任务配置
     cfg_root = Path(__file__).parent.parent / "configs/policy"
     task_cfg = load_task_config(cfg_root, int(
-        task_name.split('_')[0].replace('task', '')))
+        task_param.split('_')[0].replace('task', '')))
     task_id = task_cfg.task.id
     task_name = task_cfg.task.name
+
+    # 设置task字段用于路径（格式：task{id}_{name}，如task1_moving_grasp）
+    cfg.task = f"task{task_id}_{task_name}"
 
     print("\n" + "="*70)
     print(f"🤖 SmolVLA Sequential Training - Stage {task_id}")
@@ -676,11 +682,15 @@ def main(cfg: DictConfig):
     print(f"Language: {task_cfg.task.language_instruction}")
     print("="*70 + "\n")
 
-    # 设置输出目录
-    output_directory = Path(cfg.training.output_directory) / \
-        f"task{task_id}_{task_name}"
+    # 设置输出目录（与其他策略一致的格式）
+    # 格式: outputs/train/{task}/{method}/run_{timestamp}
+    # 展开: outputs/train/task1_moving_grasp/smolvla_sequential/run_20251011_123456
+    output_directory = Path(cfg.training.output_directory) / f"run_{cfg.timestamp}"
     output_directory.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir=str(output_directory))
+
+    print(f"📁 Output Directory: {output_directory}")
+    print(f"📅 Timestamp: {cfg.timestamp}\n")
 
     device = torch.device(cfg.training.device)
 
