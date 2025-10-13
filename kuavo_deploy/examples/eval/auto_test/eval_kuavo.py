@@ -44,6 +44,7 @@ import cv2
 from kuavo_train.wrapper.policy.diffusion.DiffusionPolicyWrapper import CustomDiffusionPolicyWrapper
 from kuavo_train.wrapper.policy.humanoid.HumanoidDiffusionPolicy import HumanoidDiffusionPolicy
 from kuavo_train.wrapper.policy.vla.VLAPolicyWrapper import VLAPolicyWrapper
+from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot.utils.random_utils import set_seed
 import datetime
@@ -102,16 +103,52 @@ def check_control_signals():
     return True  # 正常继续
 
 
+def img_preprocess_smolvla(image, device="cpu", target_size=(512, 512)):
+    """
+    SmolVLA图像预处理（使用padding保持长宽比）
+
+    Args:
+        image: numpy array, shape (H, W, 3)
+        device: torch device
+        target_size: tuple (height, width), 目标尺寸
+
+    Returns:
+        torch tensor, shape (1, 3, H, W)
+    """
+    h, w = image.shape[:2]
+    target_h, target_w = target_size
+
+    # 计算缩放比例（保持长宽比）
+    scale = min(target_h / h, target_w / w)
+    new_h, new_w = int(h * scale), int(w * scale)
+
+    # Resize
+    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+    # Padding到目标尺寸
+    pad_h = target_h - new_h
+    pad_w = target_w - new_w
+    top = pad_h // 2
+    bottom = pad_h - top
+    left = pad_w // 2
+    right = pad_w - left
+
+    # 使用黑色padding
+    padded = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)
+
+    return to_tensor(padded).unsqueeze(0).to(device, non_blocking=True)
+
+
 def img_preprocess(image, device="cpu", target_size=None, crop_size=448):
     """
     预处理RGB图像（与训练保持一致：先crop再resize）
-    
+
     Args:
         image: numpy array, shape (H, W, 3)
         device: torch device
         target_size: tuple (height, width), resize的目标尺寸
         crop_size: int, 中心裁剪的尺寸（默认448与训练一致）
-    
+
     Returns:
         torch tensor, shape (1, 3, H, W)
     """
@@ -124,11 +161,11 @@ def img_preprocess(image, device="cpu", target_size=None, crop_size=448):
         bottom = min(h, top + crop_size)
         right = min(w, left + crop_size)
         image = image[top:bottom, left:right]
-    
+
     # 2. Resize到目标尺寸
     if target_size is not None and (image.shape[0] != target_size[0] or image.shape[1] != target_size[1]):
         image = cv2.resize(image, (target_size[1], target_size[0]), interpolation=cv2.INTER_LINEAR)
-    
+
     return to_tensor(image).unsqueeze(0).to(device, non_blocking=True)
 
 
@@ -203,9 +240,18 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
         # Log VLA specific info
         log_model.info(f"📊 Token dim: {policy.config.token_embed_dim}")
         log_model.info(f"📊 Transformer depth: {policy.config.transformer_depth}")
+    elif policy_type == 'smolvla':
+        log_model.info("🤖 Loading SmolVLA Policy...")
+        policy = SmolVLAPolicyWrapper.from_pretrained(
+            Path(pretrained_path), strict=True)
+        # Log SmolVLA specific info
+        log_model.info(f"📊 VLM Model: {policy.config.vlm_model_name}")
+        log_model.info(f"📊 Action chunk size: {policy.config.chunk_size}")
+        log_model.info(f"📊 Max action dim: {policy.config.max_action_dim}")
+        log_model.info(f"📊 Vision encoder frozen: {policy.config.freeze_vision_encoder}")
     else:
         raise ValueError(
-            f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion', 'vla_transformer'")
+            f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion', 'vla_transformer', 'smolvla'")
 
     policy.eval()
     policy.to(device)
@@ -334,6 +380,12 @@ def main(config_path: str, episode: int):
     # Select your device
     device = torch.device(cfg.device)
 
+    # Get language instruction for SmolVLA
+    language_instruction = None
+    if policy_type == 'smolvla' and hasattr(cfg, 'language_instruction'):
+        language_instruction = cfg.language_instruction
+        log_model.info(f"🗣️ Language instruction: {language_instruction}")
+
     policy = setup_policy(pretrained_path, policy_type, device)
 
     # Initialize evaluation environment to render two observation types:
@@ -417,15 +469,27 @@ def main(config_path: str, episode: int):
 
         for k, v in numpy_observation.items():
             if "images" in k:
-                observation[k] = img_preprocess(v, device=device, target_size=target_image_size)
+                # SmolVLA uses padding instead of cropping
+                if policy_type == 'smolvla':
+                    observation[k] = img_preprocess_smolvla(v, device=device, target_size=target_image_size)
+                else:
+                    observation[k] = img_preprocess(v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
             elif "state" in k:
-                observation[k] = torch.from_numpy(v).float().unsqueeze(
-                    0).to(device, non_blocking=True)
+                state_tensor = torch.from_numpy(v).float().unsqueeze(0).to(device, non_blocking=True)
+                # SmolVLA expects 32D state, pad from 16D
+                if policy_type == 'smolvla' and state_tensor.shape[-1] == 16:
+                    pad_zeros = torch.zeros((state_tensor.shape[0], 16), dtype=state_tensor.dtype, device=device)
+                    state_tensor = torch.cat([state_tensor, pad_zeros], dim=-1)
+                observation[k] = state_tensor
                 observation_shapes[k] = observation[k].shape
             elif "depth" in k:
                 observation[k] = depth_preprocess(v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
+
+        # Add language instruction for SmolVLA
+        if policy_type == 'smolvla' and language_instruction is not None:
+            observation['task'] = [language_instruction]
 
         with torch.inference_mode():
             action = policy.select_action(observation)
@@ -438,6 +502,12 @@ def main(config_path: str, episode: int):
         inference_time = time.time() - start_time
 
         numpy_action = action.squeeze(0).cpu().numpy()
+
+        # SmolVLA outputs 32D actions, extract first 16D for Kuavo
+        if policy_type == 'smolvla' and numpy_action.shape[-1] == 32:
+            numpy_action = numpy_action[:16]
+            log_model.debug(f"SmolVLA action extracted: 32D → 16D")
+
         log_model.debug(f"numpy_action: {numpy_action}")
 
         # 记录推理信息到日志
