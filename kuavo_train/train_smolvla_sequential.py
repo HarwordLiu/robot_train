@@ -30,36 +30,38 @@ SmolVLA顺序多任务训练脚本
 """
 
 # Ensure custom patches are applied
+import random
+from kuavo_train.utils.augmenter import DeterministicAugmenterColor
+from kuavo_train.utils.utils import save_rng_state, load_rng_state
+from kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper import SmolVLAConfigWrapper
+from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
+from lerobot.configs.types import FeatureType
+from lerobot.utils.random_utils import set_seed
+from lerobot.datasets.utils import dataset_to_policy_features
+from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata, LeRobotDataset
+from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader, ConcatDataset, WeightedRandomSampler
+import torch.nn as nn
+import torch
+from typing import Optional, Dict, Any
+import json
+from functools import partial
+from pathlib import Path
+from omegaconf import DictConfig, OmegaConf
+import hydra
 import lerobot_patches.custom_patches
 
 import os
 # 消除tokenizers fork警告
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from pathlib import Path
-from functools import partial
-import json
-from typing import Optional, Dict, Any
-
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, ConcatDataset, WeightedRandomSampler
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-
-from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata, LeRobotDataset
-from lerobot.datasets.utils import dataset_to_policy_features
-from lerobot.utils.random_utils import set_seed
-from lerobot.configs.types import FeatureType
 
 # 导入SmolVLA模块
-from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
-from kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper import SmolVLAConfigWrapper
 
 # 导入训练状态保存/加载工具
-from kuavo_train.utils.utils import save_rng_state, load_rng_state
+
+# 导入数据增强工具
 
 
 def setup_logging():
@@ -140,7 +142,8 @@ class ReplayDatasetManager:
         chunk_size = self.cfg.policy.chunk_size
         delta_timestamps = {
             "observation.state": [0],  # 只取当前帧
-            "action": [i / self.dataset_fps for i in range(chunk_size)],  # 未来chunk_size帧
+            # 未来chunk_size帧
+            "action": [i / self.dataset_fps for i in range(chunk_size)],
         }
 
         for task_key, weight in replay_config.items():
@@ -199,7 +202,8 @@ def pad_tensor_to_target_dim(tensor, target_dim: int):
 
         if isinstance(tensor, torch.Tensor):
             # torch.Tensor: 使用torch.zeros
-            pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
+            pad_tensor = torch.zeros(
+                pad_shape, dtype=tensor.dtype, device=tensor.device)
             return torch.cat([tensor, pad_tensor], dim=-1)
         elif isinstance(tensor, np.ndarray):
             # numpy.ndarray: 使用np.zeros
@@ -241,7 +245,8 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict],
         pad_shape = list(tensor.shape[:-1]) + [pad_size]
 
         if isinstance(tensor, torch.Tensor):
-            pad_tensor = torch.ones(pad_shape, dtype=tensor.dtype, device=tensor.device)
+            pad_tensor = torch.ones(
+                pad_shape, dtype=tensor.dtype, device=tensor.device)
             return torch.cat([tensor, pad_tensor], dim=-1)
         elif isinstance(tensor, np.ndarray):
             pad_array = np.ones(pad_shape, dtype=tensor.dtype)
@@ -258,24 +263,30 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict],
             for stat_name, stat_tensor in stats_dict.items():
                 if stat_name == 'mean':
                     # mean填充0
-                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_action_dim)
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(
+                        stat_tensor, target_action_dim)
                 elif stat_name == 'std':
                     # std填充1（避免除0，且不改变填充部分的值）
-                    padded_stats[key][stat_name] = pad_with_ones(stat_tensor, target_action_dim)
+                    padded_stats[key][stat_name] = pad_with_ones(
+                        stat_tensor, target_action_dim)
                 else:
                     # 其他统计信息（如min, max）也需要填充
-                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_action_dim)
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(
+                        stat_tensor, target_action_dim)
 
         elif 'state' in key.lower() or 'observation.state' in key:
             # 填充state相关统计
             padded_stats[key] = {}
             for stat_name, stat_tensor in stats_dict.items():
                 if stat_name == 'mean':
-                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_state_dim)
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(
+                        stat_tensor, target_state_dim)
                 elif stat_name == 'std':
-                    padded_stats[key][stat_name] = pad_with_ones(stat_tensor, target_state_dim)
+                    padded_stats[key][stat_name] = pad_with_ones(
+                        stat_tensor, target_state_dim)
                 else:
-                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(stat_tensor, target_state_dim)
+                    padded_stats[key][stat_name] = pad_tensor_to_target_dim(
+                        stat_tensor, target_state_dim)
         else:
             # 不是action或state，直接复制
             padded_stats[key] = stats_dict
@@ -321,7 +332,9 @@ def create_dataloader_with_language(
     pin_memory: bool = True,
     drop_last: bool = False,
     target_action_dim: int = 32,
-    target_state_dim: int = 32
+    target_state_dim: int = 32,
+    use_augmentation: bool = True,
+    augmentation_prob: float = 0.5
 ) -> DataLoader:
     """
     创建包含language instruction的DataLoader，并自动填充action/state维度
@@ -335,10 +348,15 @@ def create_dataloader_with_language(
         drop_last: 是否丢弃最后一个batch
         target_action_dim: 目标action维度（默认32，与SmolVLA预训练一致）
         target_state_dim: 目标state维度（默认32，与SmolVLA预训练一致）
+        use_augmentation: 是否使用数据增强
+        augmentation_prob: 数据增强概率
 
     Returns:
         DataLoader
     """
+
+    # 创建数据增强器
+    augmenter = DeterministicAugmenterColor() if use_augmentation else None
 
     def collate_fn_with_language(batch):
         """为batch添加language instruction并填充action/state维度"""
@@ -350,15 +368,26 @@ def create_dataloader_with_language(
         batch_size = batch_dict[list(batch_dict.keys())[0]].shape[0]
         batch_dict['task'] = [language_instruction] * batch_size
 
+        # 数据增强（50%概率应用）
+        if augmenter is not None and random.random() < augmentation_prob:
+            augmenter.set_random_params()
+            for key in batch_dict.keys():
+                if 'image' in key.lower() and isinstance(batch_dict[key], torch.Tensor):
+                    # 应用图像增强
+                    batch_dict[key] = augmenter.apply_augment_sequence(
+                        batch_dict[key])
+
         # 填充action和state维度（从Kuavo的16维到SmolVLA的32维）
         for key in batch_dict.keys():
             if isinstance(batch_dict[key], torch.Tensor):
                 if 'action' in key.lower():
                     # 填充action维度
-                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_action_dim)
+                    batch_dict[key] = pad_tensor_to_target_dim(
+                        batch_dict[key], target_action_dim)
                 elif 'state' in key.lower() or 'observation.state' in key:
                     # 填充state维度
-                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_state_dim)
+                    batch_dict[key] = pad_tensor_to_target_dim(
+                        batch_dict[key], target_state_dim)
 
         return batch_dict
 
@@ -399,13 +428,15 @@ def create_mixed_dataloader(
     chunk_size = cfg.policy.chunk_size
     delta_timestamps = {
         "observation.state": [0],  # 只取当前帧
-        "action": [i / dataset_fps for i in range(chunk_size)],  # 未来chunk_size帧
+        # 未来chunk_size帧
+        "action": [i / dataset_fps for i in range(chunk_size)],
     }
 
     print(f"📐 Dataset delta_timestamps configuration:")
     print(f"   - Dataset FPS: {dataset_fps}")
     print(f"   - observation.state: current frame only")
-    print(f"   - action: {chunk_size} future frames ({chunk_size/dataset_fps:.2f}s @ {dataset_fps}fps)")
+    print(
+        f"   - action: {chunk_size} future frames ({chunk_size/dataset_fps:.2f}s @ {dataset_fps}fps)")
 
     # 当前任务数据集（使用delta_timestamps）
     current_dataset = LeRobotDataset(
@@ -503,6 +534,9 @@ def create_mixed_dataloader(
     print(f"📊 Mixed Dataset: {len(mixed_dataset)} frames (with replay)")
     print(f"   Weights: {mixed_dataset.weights}")
 
+    # 创建数据增强器
+    augmenter = DeterministicAugmenterColor()
+
     def collate_fn_with_padding(batch):
         """collate函数：处理mixed dataset的batch并填充维度"""
         from torch.utils.data._utils.collate import default_collate
@@ -517,6 +551,15 @@ def create_mixed_dataloader(
         # 添加task字段回去
         batch_dict['task'] = tasks
 
+        # 数据增强（50%概率应用）
+        if random.random() < 0.5:
+            augmenter.set_random_params()
+            for key in batch_dict.keys():
+                if 'image' in key.lower() and isinstance(batch_dict[key], torch.Tensor):
+                    # 应用图像增强
+                    batch_dict[key] = augmenter.apply_augment_sequence(
+                        batch_dict[key])
+
         # 填充action和state维度
         target_action_dim = cfg.policy.max_action_dim
         target_state_dim = cfg.policy.max_state_dim
@@ -524,9 +567,11 @@ def create_mixed_dataloader(
         for key in batch_dict.keys():
             if isinstance(batch_dict[key], torch.Tensor):
                 if 'action' in key.lower():
-                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_action_dim)
+                    batch_dict[key] = pad_tensor_to_target_dim(
+                        batch_dict[key], target_action_dim)
                 elif 'state' in key.lower() or 'observation.state' in key:
-                    batch_dict[key] = pad_tensor_to_target_dim(batch_dict[key], target_state_dim)
+                    batch_dict[key] = pad_tensor_to_target_dim(
+                        batch_dict[key], target_state_dim)
 
         return batch_dict
 
@@ -585,7 +630,8 @@ def validate_all_tasks(
         train_episode_end = task_cfg.task.data.episodes_to_use[1]
 
         # 验证用前N个episodes
-        val_episode_end = min(train_episode_start + num_val_episodes - 1, train_episode_end)
+        val_episode_end = min(train_episode_start +
+                              num_val_episodes - 1, train_episode_end)
         val_episodes = list(range(train_episode_start, val_episode_end + 1))
 
         # 确保不超过num_val_episodes
@@ -698,7 +744,8 @@ def main(cfg: DictConfig):
     # 设置输出目录（与其他策略一致的格式）
     # 格式: outputs/train/{task}/{method}/run_{timestamp}
     # 展开: outputs/train/task1_moving_grasp/smolvla_sequential/run_20251011_123456
-    output_directory = Path(cfg.training.output_directory) / f"run_{cfg.timestamp}"
+    output_directory = Path(
+        cfg.training.output_directory) / f"run_{cfg.timestamp}"
     output_directory.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir=str(output_directory))
 
@@ -791,11 +838,13 @@ def main(cfg: DictConfig):
     replay_manager = None
     if task_id > 1 and cfg.sequential.use_replay_buffer:
         cfg_root = Path(__file__).parent.parent / "configs/policy"
-        replay_manager = ReplayDatasetManager(cfg, task_id, cfg_root, dataset_fps)
+        replay_manager = ReplayDatasetManager(
+            cfg, task_id, cfg_root, dataset_fps)
         replay_manager.load_replay_tasks()
 
     # 创建dataloader（传递dataset_fps）
-    dataloader = create_mixed_dataloader(cfg, task_cfg, replay_manager, dataset_fps)
+    dataloader = create_mixed_dataloader(
+        cfg, task_cfg, replay_manager, dataset_fps)
 
     # ==================== 构建优化器 ====================
     optimizer = policy.config.get_optimizer_preset().build(policy.parameters())
@@ -942,7 +991,8 @@ def main(cfg: DictConfig):
     print("="*70)
 
     cfg_root = Path(__file__).parent.parent / "configs/policy"
-    final_results = validate_all_tasks(policy, cfg, task_id, device, cfg_root, dataset_fps)
+    final_results = validate_all_tasks(
+        policy, cfg, task_id, device, cfg_root, dataset_fps)
 
     # 保存训练结果
     results_file = output_directory / "training_results.json"
