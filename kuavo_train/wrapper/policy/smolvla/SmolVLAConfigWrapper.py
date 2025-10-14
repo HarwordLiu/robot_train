@@ -61,6 +61,8 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
 
         当 OmegaConf 配置被转换为原生 Python 对象后，input_features 和 output_features 
         会变成字典，需要重新转换为 PolicyFeature 对象以供策略模型使用。
+        
+        重要：确保使用 custom_patches 中的 FeatureType，以支持 DEPTH 和 RGB 类型。
 
         Args:
             d: 字典或包含字典的字典
@@ -68,13 +70,26 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         Returns:
             包含 PolicyFeature 对象的字典
         """
+        from lerobot_patches.custom_patches import FeatureType as CustomFeatureType
+        
         if not isinstance(d, dict):
             return d
 
-        return {
-            k: PolicyFeature(**v) if isinstance(v, dict) and not isinstance(v, PolicyFeature) else v
-            for k, v in d.items()
-        }
+        result = {}
+        for k, v in d.items():
+            if isinstance(v, dict) and not isinstance(v, PolicyFeature):
+                # 显式转换 type 字段为 custom FeatureType（支持 DEPTH 和 RGB）
+                v_copy = v.copy()
+                if 'type' in v_copy and isinstance(v_copy['type'], str):
+                    try:
+                        v_copy['type'] = CustomFeatureType(v_copy['type'])
+                    except ValueError:
+                        # 如果字符串不是有效的 FeatureType，保持原样，让 PolicyFeature 处理
+                        pass
+                result[k] = PolicyFeature(**v_copy)
+            else:
+                result[k] = v
+        return result
 
     def __post_init__(self):
         """

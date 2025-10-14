@@ -77,7 +77,7 @@ device: 'cuda' # or "cpu"
 #   - task4_sorting: Full process sorting
 task: 'task1_moving_grasp'
 method: 'smolvla_sequential'
-timestamp: 'run_20251013_160020' # Your actual training timestamp
+timestamp: 'run_20251014_112525' # Your actual training timestamp
 epoch: 10 # Test epoch 10 model (loss ~0.02)
 
 # ==================== Language Instruction Configuration ====================
