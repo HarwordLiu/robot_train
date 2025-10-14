@@ -7,11 +7,11 @@ task:
   stage: 1 # Stage 1: 从预训练模型开始
 
   # 任务描述（中文）
-  description: '机器人从移动的传送带上抓取物体，放置于桌面后，再将其推送至指定区域内'
+  description: '机器人从移动的传送带上抓取物体，放置于桌面第一个目标位置后，再将其拿起至第二个目标位置'
 
   # Language Instruction（英文，SmolVLA使用）
   # 这个instruction会在每个batch中作为任务条件输入模型
-  language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
+  language_instruction: 'Pick up the moving object from the conveyor belt, place it precisely at the first target position on the table, then pick it up again and place it precisely at the second target position'
 
   # 数据配置
   data:

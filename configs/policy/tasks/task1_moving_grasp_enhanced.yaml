@@ -1,0 +1,84 @@
+# ==================== 任务1：移动目标抓取（增强版） ====================
+
+# 任务基本信息
+task:
+  id: 1
+  name: 'moving_grasp'
+  stage: 1 # Stage 1: 从预训练模型开始
+
+  # 任务描述（中文）
+  description: '机器人从移动的传送带上抓取物体，放置于桌面第一个目标位置后，再将其拿起至第二个目标位置'
+
+  # ==================== Language Instruction优化 ====================
+  # 核心思路：将任务分解为子阶段，每个阶段使用更精确的描述
+
+  # 方式1：单一全局instruction（原版，泛化性好但精度低）
+  language_instruction: 'Pick up the moving object from the conveyor belt, place it precisely at the first target position on the table, then pick it up again and place it precisely at the second target position'
+
+  # 方式2：阶段化instructions（推荐，精度高）
+  phase_instructions:
+    # 阶段1：靠近并抓取（强调边界位置）
+    approach_grasp: 'Use left arm to reach and grasp the object at the edge of the moving conveyor belt with precise gripper control'
+
+    # 阶段2：移动到第一个目标位置
+    transport_to_first: 'Carefully transport the grasped object from the conveyor belt to the table surface while maintaining stable grip'
+
+    # 阶段3：第一次精确放置（强调位置精度）
+    first_placement: 'Place the object precisely at the first target position on the table with accurate position control and gentle release'
+
+    # 阶段4：再次抓取
+    regrasp: 'Approach and grasp the object again from the first position on the table with precise gripper alignment'
+
+    # 阶段5：移动到第二个目标位置
+    transport_to_second: 'Transport the regrasped object carefully to the second target position on the table'
+
+    # 阶段6：第二次精确放置（强调末端控制和精度）
+    second_placement: 'Place the object precisely at the second target position with accurate position control, ensuring minimal placement error'
+
+  # 方式3：混合instruction（在训练时随机选择，增强泛化）
+  # 70%使用阶段化instruction，30%使用全局instruction
+  use_mixed_instructions: True
+  mixed_instruction_ratio:
+    global: 0.3
+    phase_specific: 0.7
+
+  # 数据配置
+  data:
+    root: '/root/robot/data/task-1/1-2000/lerobot/'
+    repoid: 'lerobot/task1_moving_grasp'
+    episodes_to_use: [0, 199]
+
+  # 训练配置
+  training:
+    max_epoch: 50 # 减少到50轮（前面分析已收敛）
+
+    # Stage 1: 从HuggingFace预训练SmolVLA开始
+    resume_from: 'pretrained'
+    pretrained_path: 'lerobot/smolvla_base'
+
+    # 优化器配置
+    policy:
+      optimizer_lr: 0.0001
+      scheduler_warmup_steps: 2000
+      scheduler_decay_steps: 90000 # 匹配50轮 (50 * 1847 ≈ 92,350)
+
+    # ==================== 新增：阶段加权Loss配置 ====================
+    use_phase_weighted_loss: True
+    phase_loss_weights:
+      approach_grasp: 0.8 # 靠近并抓取：权重较低
+      transport_to_first: 1.0 # 移动到第一个位置：标准权重
+      first_placement: 2.5 # 第一次放置：高权重（重点优化）
+      regrasp: 1.2 # 再次抓取：稍高权重（需要准确对齐）
+      transport_to_second: 1.0 # 移动到第二个位置：标准权重
+      second_placement: 2.8 # 第二次放置：最高权重（最终位置精度最重要）
+
+    # ==================== 新增：数据增强配置 ====================
+    use_state_action_augmentation: True
+    augmentation:
+      # 边界增强（针对问题1）
+      boundary_augment_prob: 0.3
+      boundary_noise_std: 0.05 # 5度的随机噪声
+
+      # 精细操作增强（针对问题2&3）
+      fine_motion_augment_prob: 0.5
+      fine_motion_noise_std: 0.01 # 1度的小噪声

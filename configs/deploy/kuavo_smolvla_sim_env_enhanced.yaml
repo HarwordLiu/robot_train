@@ -1,0 +1,148 @@
+hydra: # Hydra configuration directory
+  run:
+    dir: ./outputs/kuavo_smolvla_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/kuavo_smolvla_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+# ==================== SmolVLA Simulation Environment Configuration (Enhanced) ====================
+# 增强版配置 - 集成推理优化（无需重新训练）
+
+# Environment config
+real: false # Simulation environment
+only_arm: true # Only use arm data
+eef_type: rq2f85 # End-effector type: rq2f85 for simulation
+control_mode: joint # Joint control mode
+which_arm: both # Which arm: left, right, both
+head_init: [0, 0.209] # Robot head initial position
+
+# Input images: must match training configuration
+input_images:
+  ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
+depth_range: [0, 1000] # Depth image clipping range (mm)
+image_size: [480, 640] # Original ROS topic image size
+target_image_size: [512, 512] # SmolVLA requires 512x512
+ros_rate: 10 # Inference frequency (Hz)
+
+# End-effector DOF configuration
+qiangnao_dof_needed: 1
+leju_claw_dof_needed: 1
+rq2f85_dof_needed: 1
+
+# Arm initialization and limits
+arm_init: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+arm_min:
+  [
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+    -180,
+  ]
+arm_max: [180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180]
+
+eef_min: [0]
+eef_max: [1]
+
+is_binary: false
+
+# ==================== SmolVLA Inference Configuration ====================
+go_bag_path: /your_bag_path # Provide full bag path for inference
+
+policy_type: 'smolvla' # SmolVLA sequential policy
+use_delta: false # Delta action (not supported yet)
+eval_episodes: 50 # Number of evaluation episodes
+seed: 42 # Random seed
+start_seed: 42 # Episode start seed
+device: 'cuda' # or "cpu"
+
+# ==================== Model Path Configuration ====================
+task: 'task1_moving_grasp'
+method: 'smolvla_sequential'
+timestamp: 'run_20251013_160020' # Your actual training timestamp
+epoch: 10 # Test epoch 10 model
+
+# ==================== Language Instruction Configuration (Enhanced) ====================
+# ✨ 使用更精确的language instruction（针对任务1）
+
+# 旧版（不够精确）
+# language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
+
+# ✨ 新版（精确描述两次放置）
+language_instruction_enhanced: 'Pick up the moving object from the conveyor belt, place it precisely at the first target position on the table, then pick it up again and place it precisely at the second target position'
+
+# 如果配置了enhanced版本，将使用这个；否则回退到普通版本
+language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
+
+# ==================== ✨ Action Postprocessing Configuration ✨ ====================
+# 推理后处理参数（无需重新训练，立即见效）
+
+# 启用/禁用后处理
+enable_postprocessing: true # 设为false可以关闭所有后处理
+
+# 1. 平滑滤波（减少抖动）
+enable_smoothing: true
+smooth_alpha: 0.3 # EMA平滑系数（0-1），越小越平滑但响应越慢
+                  # 推荐范围：0.2-0.5
+                  # 0.3: 平衡平滑度和响应速度
+
+# 2. 精细操作增益（放大放置动作）
+enable_fine_gain: true
+fine_motion_gain: 1.5 # 精细操作放大倍数
+                      # 推荐范围：1.3-2.0
+                      # 1.5: 放大50%，提升放置精度
+                      # 2.0: 放大100%，更激进
+
+# 3. 工作空间限制（防止越界）
+enable_workspace_limit: true # 限制关节角度在物理限位内
+
+# 4. 速度限制（保证安全）
+enable_velocity_limit: true
+max_velocity: 0.2 # 最大关节速度（rad/s）
+control_frequency: 10.0 # 控制频率（Hz）
+
+# ==================== 参数调优指南 ====================
+#
+# 如果边界抓取还是失败：
+#   - 不适用后处理（这个问题需要重新训练）
+#
+# 如果放置精度不够：
+#   - 增加 fine_motion_gain: 1.5 → 1.8 → 2.0
+#   - 降低 smooth_alpha: 0.3 → 0.2（更平滑）
+#
+# 如果动作太抖动：
+#   - 降低 smooth_alpha: 0.3 → 0.2 → 0.15
+#   - 降低 fine_motion_gain: 1.5 → 1.3
+#
+# 如果动作太慢/不响应：
+#   - 增加 smooth_alpha: 0.3 → 0.4 → 0.5
+#   - 检查 max_velocity 是否太小
+#
+# ==================== 对比测试建议 ====================
+#
+# A/B测试方案：
+# 1. 基线测试（关闭后处理）:
+#    enable_postprocessing: false
+#    运行5个episodes，记录成功率和放置精度
+#
+# 2. 增强测试（开启后处理）:
+#    enable_postprocessing: true
+#    fine_motion_gain: 1.5
+#    运行5个episodes，对比改善幅度
+#
+# 3. 激进测试（更大增益）:
+#    fine_motion_gain: 2.0
+#    测试是否过度放大导致不稳定
+
+# ==================== Environment Configuration ====================
+max_episode_steps: 500 # Maximum episode steps
+env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
