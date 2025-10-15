@@ -195,6 +195,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         注意：对于 state 和 action，使用 max_state_dim 和 max_action_dim（32维）
         而不是实际的维度（16维），以匹配训练时的填充维度。
         
+        对于深度特征的shape不匹配问题，会在加载checkpoint时通过broadcasting自动解决。
+        
         Args:
             config: SmolVLA配置对象
             
@@ -296,7 +298,44 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                 
                 # 再加载归一化参数（如果存在）
                 if norm_state_dict:
-                    model.load_state_dict(norm_state_dict, strict=False)
+                    # 修复深度特征归一化参数的shape不匹配问题
+                    # checkpoint中深度特征的归一化参数是(1,1,1)，但模型初始化时创建的是(1,480,640)
+                    # 我们需要保持(1,1,1)以便在forward时自动broadcast到任意分辨率
+                    
+                    import torch.nn as nn
+                    
+                    # 直接访问并替换归一化模块中的参数
+                    for key, value in norm_state_dict.items():
+                        # 通过名称访问嵌套的参数
+                        # 例如: normalize_inputs.buffer_observation_depth_h.mean
+                        parts = key.split('.')
+                        obj = model
+                        
+                        # 导航到目标对象（例如ParameterDict）
+                        for part in parts[:-1]:
+                            obj = getattr(obj, part)
+                        
+                        # 获取最后一个属性名（例如'mean'）
+                        param_name = parts[-1]
+                        
+                        # 如果是ParameterDict，直接替换其中的Parameter
+                        if isinstance(obj, nn.ParameterDict):
+                            current_param = obj[param_name]
+                            checkpoint_shape = value.shape
+                            current_shape = current_param.shape
+                            
+                            if checkpoint_shape != current_shape:
+                                print(f"🔧 Keeping compact shape for {key}: {checkpoint_shape} (model had {current_shape})")
+                            
+                            # 创建新的Parameter对象，保持checkpoint的shape
+                            obj[param_name] = nn.Parameter(value, requires_grad=False)
+                        else:
+                            # 其他情况，尝试直接赋值
+                            if hasattr(obj, param_name):
+                                current_param = getattr(obj, param_name)
+                                if hasattr(current_param, 'data'):
+                                    current_param.data = value
+                    
                     print(f"✅ Loaded normalization parameters from checkpoint")
                     print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_inputs' in k])} input norm params")
                     print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_targets' in k])} target norm params")
