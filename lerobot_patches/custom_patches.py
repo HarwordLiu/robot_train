@@ -120,11 +120,20 @@ def dataset_to_policy_features(features: dict[str, dict]) -> dict[str, PolicyFea
     policy_features = {}
     for key, ft in features.items():
         shape = ft["shape"]
-        if ft["dtype"] in ["image", "video", "uint16"]:
-            if "depth" in key or "DEPTH" in key:
-                type = FeatureType.DEPTH
-            else:
-                type = FeatureType.VISUAL  # or type = FeatureType.RGB 
+        # 优先检查是否是深度图（在检查其他observation之前）
+        if "depth" in key.lower() or "DEPTH" in key:
+            # 深度图应该被标记为DEPTH类型，而不是STATE
+            type = FeatureType.DEPTH
+            if ft["dtype"] == "uint16":
+                # 深度图的shape处理
+                if len(shape) != 3:
+                    raise ValueError(f"Number of dimensions of {key} != 3 (shape={shape})")
+                names = ft["names"]
+                # 确保channel first格式
+                if names[2] in ["channel", "channels"]:  # (h, w, c) -> (c, h, w)
+                    shape = (shape[2], shape[0], shape[1])
+        elif ft["dtype"] in ["image", "video"]:
+            type = FeatureType.VISUAL  # or type = FeatureType.RGB 
             if len(shape) != 3:
                 raise ValueError(f"Number of dimensions of {key} != 3 (shape={shape})")
 
@@ -145,6 +154,10 @@ def dataset_to_policy_features(features: dict[str, dict]) -> dict[str, PolicyFea
             type=type,
             shape=shape,
         )
+        
+        # 调试输出
+        if "depth" in key.lower():
+            print(f"  → {key}: type={type}, shape={shape}, dtype={ft['dtype']}")
 
     return policy_features
 

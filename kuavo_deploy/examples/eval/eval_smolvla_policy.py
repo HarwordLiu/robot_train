@@ -101,12 +101,46 @@ def img_preprocess_smolvla(image, target_size=(512, 512), device="cpu"):
     # Add batch dimension [1, 3, 512, 512]
     return tensor_img.unsqueeze(0).to(device, non_blocking=True)
 
-def depth_preprocess(depth, device="cpu", depth_range=[0, 1000]):
-    """Preprocess depth image"""
+def depth_preprocess(depth, device="cpu", depth_range=[0, 1000], target_size=None):
+    """
+    Preprocess depth image for SmolVLA
+    
+    Args:
+        depth: Input depth image (numpy array or tensor)
+        device: Device to place tensor on
+        depth_range: Depth clipping range [min, max] in mm
+        target_size: Target size (H, W) for resizing, if None, no resizing
+    
+    Returns:
+        Preprocessed depth tensor [1, 1, H, W]
+    """
     depth = np.array(depth)
     depth = np.clip(depth, depth_range[0], depth_range[1])
     depth = (depth - depth_range[0]) / (depth_range[1] - depth_range[0])
-    return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device, non_blocking=True)
+    
+    # Convert to tensor [1, H, W] or [H, W]
+    depth_tensor = torch.tensor(depth, dtype=torch.float32)
+    
+    # Ensure shape is [1, H, W]
+    if depth_tensor.ndim == 2:
+        depth_tensor = depth_tensor.unsqueeze(0)  # [H, W] -> [1, H, W]
+    elif depth_tensor.ndim == 3 and depth_tensor.shape[0] != 1:
+        # If shape is [H, W, 1], transpose to [1, H, W]
+        if depth_tensor.shape[2] == 1:
+            depth_tensor = depth_tensor.permute(2, 0, 1)
+    
+    # Resize if target_size is provided
+    if target_size is not None:
+        target_h, target_w = target_size
+        # Use nearest neighbor interpolation for depth
+        depth_tensor = torch.nn.functional.interpolate(
+            depth_tensor.unsqueeze(0),  # [1, 1, H, W]
+            size=(target_h, target_w),
+            mode='nearest'
+        ).squeeze(0)  # [1, H, W]
+    
+    # Add batch dimension [1, 1, H, W]
+    return depth_tensor.unsqueeze(0).to(device, non_blocking=True)
 
 def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.device("cuda")):
     """

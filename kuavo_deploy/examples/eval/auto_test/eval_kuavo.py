@@ -204,6 +204,48 @@ def depth_preprocess(depth, device="cpu", target_size=None, crop_size=448):
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
 
 
+def depth_preprocess_smolvla(depth, device="cpu", target_size=(512, 512)):
+    """
+    SmolVLA深度图预处理（使用padding保持长宽比，与训练时一致）
+    
+    Args:
+        depth: numpy array, shape (1, H, W) or (H, W)
+        device: torch device
+        target_size: tuple (height, width), 目标尺寸
+    
+    Returns:
+        torch tensor, shape (1, 1, H, W)
+    """
+    # 处理输入形状
+    if depth.ndim == 3 and depth.shape[0] == 1:
+        depth = depth[0]  # (1, H, W) -> (H, W)
+    
+    h, w = depth.shape[:2]
+    target_h, target_w = target_size
+    
+    # 计算缩放比例（保持长宽比）
+    scale = min(target_h / h, target_w / w)
+    new_h, new_w = int(h * scale), int(w * scale)
+    
+    # Resize（使用NEAREST避免深度值被插值）
+    resized = cv2.resize(depth, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+    
+    # Padding到目标尺寸
+    pad_h = target_h - new_h
+    pad_w = target_w - new_w
+    top = pad_h // 2
+    bottom = pad_h - top
+    left = pad_w // 2
+    right = pad_w - left
+    
+    # 使用0 padding（归一化后的最小值）
+    padded = cv2.copyMakeBorder(resized, top, bottom, left, right, 
+                                cv2.BORDER_CONSTANT, value=0)
+    
+    # Convert to tensor [1, 1, H, W]
+    return torch.tensor(padded, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device, non_blocking=True)
+
+
 def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     """
     Set up and load the policy model.
@@ -484,7 +526,11 @@ def main(config_path: str, episode: int):
                 observation[k] = state_tensor
                 observation_shapes[k] = observation[k].shape
             elif "depth" in k:
-                observation[k] = depth_preprocess(v, device=device, target_size=target_image_size)
+                # SmolVLA uses padding instead of cropping
+                if policy_type == 'smolvla':
+                    observation[k] = depth_preprocess_smolvla(v, device=device, target_size=target_image_size)
+                else:
+                    observation[k] = depth_preprocess(v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
 
         # Add language instruction for SmolVLA

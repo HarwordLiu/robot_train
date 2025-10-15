@@ -192,8 +192,11 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         - mean = 0（减去0不改变数据）
         - std = 1（除以1不改变数据）
         
-        注意：对于 state 和 action，使用 max_state_dim 和 max_action_dim（32维）
-        而不是实际的维度（16维），以匹配训练时的填充维度。
+        注意事项：
+        1. 对于 state 和 action，使用 max_state_dim 和 max_action_dim（32维）
+           而不是实际的维度（16维），以匹配训练时的填充维度。
+        2. 对于图像/深度图，遵循 LeRobot 规范：归一化参数形状为 (c, 1, 1)
+           而不是完整的 (c, h, w)，确保与训练时保持一致。
         
         Args:
             config: SmolVLA配置对象
@@ -201,6 +204,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         Returns:
             包含所有features的identity stats字典
         """
+        from lerobot.configs.types import FeatureType
+        
         stats = {}
         
         # 处理input features（observations）
@@ -210,6 +215,11 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
             # 对于state，使用max_state_dim而不是实际维度
             if 'state' in key.lower():
                 shape = (config.max_state_dim,)
+            # 对于图像/深度图，遵循LeRobot规范：使用 (c, 1, 1) 而不是 (c, h, w)
+            elif feature.type in (FeatureType.VISUAL, FeatureType.RGB, FeatureType.DEPTH):
+                if len(shape) == 3:
+                    c, h, w = shape
+                    shape = (c, 1, 1)  # 每个通道一个标量
             
             stats[key] = {
                 'mean': torch.zeros(shape, dtype=torch.float32),
@@ -265,6 +275,25 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
             from .SmolVLAConfigWrapper import SmolVLAConfigWrapper
             config = SmolVLAConfigWrapper.from_pretrained(
                 pretrained_name_or_path)
+            
+            # 修复旧checkpoint中depth被错误标记为STATE的问题
+            from lerobot.configs.types import FeatureType, NormalizationMode
+            fixed_depth = False
+            for key, feature in config.input_features.items():
+                if "depth" in key.lower() and feature.type == FeatureType.STATE:
+                    # 将depth从STATE改为DEPTH
+                    feature.type = FeatureType.DEPTH
+                    fixed_depth = True
+                    print(f"🔧 Fixed feature type: {key} from STATE to DEPTH")
+            
+            # 如果修复了depth类型，也需要确保normalization_mapping中有DEPTH配置
+            if fixed_depth and hasattr(config, 'normalization_mapping'):
+                if FeatureType.DEPTH not in config.normalization_mapping:
+                    # 使用与STATE相同的归一化方式
+                    config.normalization_mapping[FeatureType.DEPTH] = config.normalization_mapping.get(
+                        FeatureType.STATE, NormalizationMode.MEAN_STD
+                    )
+                    print(f"🔧 Added DEPTH normalization: {config.normalization_mapping[FeatureType.DEPTH]}")
 
         # 如果没有提供dataset_stats，创建临时的identity stats用于初始化
         # 真实的归一化参数会从checkpoint中加载

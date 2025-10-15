@@ -58,6 +58,9 @@ policy:
     VISUAL:
       _target_: lerobot.configs.types.NormalizationMode
       value: IDENTITY # SmolVLA内部处理图像归一化
+    DEPTH:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD # 深度图使用MEAN_STD归一化，参数形状为(c,1,1)
     STATE:
       _target_: lerobot.configs.types.NormalizationMode
       value: MEAN_STD
