@@ -15,10 +15,10 @@ task:
 
   # 数据配置
   data:
-    root: '/root/robot/data/task-1/1-2000/lerobot/'
-    # root: '/mnt/e/robot/data/data/task1/lerobot/1-400/'
+    # root: '/root/robot/data/task-1/1-2000/lerobot/'
+    root: '/mnt/e/robot/data/data/task1/lerobot/1-400/'
     repoid: 'lerobot/task1_moving_grasp'
-    episodes_to_use: [0, 299]
+    episodes_to_use: [0, 199]
 
   # 训练配置
   training:
