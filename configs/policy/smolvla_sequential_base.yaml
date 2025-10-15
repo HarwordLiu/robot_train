@@ -96,8 +96,8 @@ training:
   target_action_dim: 32 # 目标动作维度（与预训练模型一致）
 
   # 数据加载（针对batch_size=64优化）
-  batch_size: 32
-  num_workers: 8 # 降低worker数量，避免CPU资源竞争
+  batch_size: 64
+  num_workers: 16 # 降低worker数量，避免CPU资源竞争
   drop_last: True
   prefetch_factor: 2 # 增加预取，提高GPU利用率
   persistent_workers: True # 保持worker进程，减少重启开销
