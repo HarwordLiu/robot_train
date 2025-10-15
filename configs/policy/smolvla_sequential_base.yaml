@@ -66,15 +66,16 @@ policy:
       value: MEAN_STD
 
   # 优化器基础配置（各任务会override学习率）
-  optimizer_betas: [0.9, 0.95]
+  # 针对batch_size=64优化的参数
+  optimizer_betas: [0.9, 0.999] # beta2=0.999对较大batch更稳定
   optimizer_eps: 1.0e-08
-  optimizer_weight_decay: 1.0e-6  # VLM需要正则化防止过拟合
-  optimizer_grad_clip_norm: 1.0  # VLM embedding空间大，需要严格梯度控制
+  optimizer_weight_decay: 5.0e-7 # 适度降低正则化，避免欠拟合
+  optimizer_grad_clip_norm: 1.0 # VLM embedding空间大，需要严格梯度控制
 
   # 学习率调度器配置（各任务会override）
-  scheduler_warmup_steps: 1500  # VLM+Action Expert异构架构需要更长warmup
-  scheduler_decay_steps: 20000
-  scheduler_decay_lr: 2.5e-6
+  scheduler_warmup_steps: 1500 # VLM+Action Expert异构架构需要更长warmup
+  scheduler_decay_steps: 25000 # 充分的cosine decay保证收敛
+  scheduler_decay_lr: 1e-6 # 最终学习率衰减到很小
 
 # ==================== 训练基础配置 ====================
 training:
@@ -85,14 +86,16 @@ training:
   # 动作维度适配配置
   target_action_dim: 32 # 目标动作维度（与预训练模型一致）
 
-  # 数据加载
-  batch_size: 32  # VLM模仿学习最优batch size，平衡收敛速度和泛化性能
-  num_workers: 10  # 保持不变
-  drop_last: True  # 保证每个batch大小一致，避免BN层统计偏差
+  # 数据加载（针对batch_size=64优化）
+  batch_size: 64
+  num_workers: 8 # 降低worker数量，避免CPU资源竞争
+  drop_last: True
+  prefetch_factor: 2 # 增加预取，提高GPU利用率
+  persistent_workers: True # 保持worker进程，减少重启开销
 
   # 日志和保存
-  save_freq_epoch: 10  # 每10个epoch保存一次checkpoint
-  log_freq: 10
+  save_freq_epoch: 3 # 更频繁保存checkpoint
+  log_freq: 50 # 减少日志IO开销，每50步记录一次
 
   # 多任务验证配置（防遗忘的关键）
   validate_all_previous_tasks: True

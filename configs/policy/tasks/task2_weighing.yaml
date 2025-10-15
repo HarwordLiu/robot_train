@@ -3,14 +3,14 @@
 # 任务基本信息
 task:
   id: 2
-  name: "weighing"
-  stage: 2  # Stage 2: 从任务1模型继续
+  name: 'weighing'
+  stage: 2 # Stage 2: 从任务1模型继续
 
   # 任务描述（中文）
-  description: "机器人从移动的传送带上拾取快递袋，先放置在电子秤上完成称重，随后再次拾起并放入指定收纳筐中"
+  description: '机器人从移动的传送带上拾取快递袋，先放置在电子秤上完成称重，随后再次拾起并放入指定收纳筐中'
 
   # Language Instruction（英文）
-  language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+  language_instruction: 'Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container'
 
   # 数据配置
   data:
@@ -20,21 +20,21 @@ task:
 
   # 训练配置
   training:
-    max_epoch: 25  # 任务2可能需要更多epochs（称重动作更复杂）
+    max_epoch: 25 # 任务2可能需要更多epochs（称重动作更复杂）
 
     # Stage 2: 从任务1的最佳checkpoint继续
     # 格式: outputs/train/{task}/{method}/run_{timestamp}/best
     # 需要手动指定任务1的timestamp！
     resume_from: 'task'
     resume_task_id: 1
-    resume_path: 'outputs/train/task1_moving_grasp/smolvla_sequential/run_XXXXXX_XXXXXX/best'  # 修改XXXXXX为实际timestamp
+    resume_path: 'outputs/train/task1_moving_grasp/smolvla_sequential/run_XXXXXX_XXXXXX/best' # 修改XXXXXX为实际timestamp
 
     # 降低学习率（防遗忘策略）
     policy:
-      optimizer_lr: 0.00005  # 减半至0.00005，保护任务1知识
-      scheduler_warmup_steps: 800   # 模型已经warm，但仍需适应
-      scheduler_decay_steps: 20000  # 延长decay
+      optimizer_lr: 3.5e-5 # 降低约30%至3.5e-5，保护任务1知识
+      scheduler_warmup_steps: 800 # 模型已经warm，但仍需适应
+      scheduler_decay_steps: 20000 # 延长decay
 
   # Replay配置（防遗忘的关键）
   replay:
-    task1_episodes: 40  # 从任务1回放40个episodes（约20%）
+    task1_episodes: 40 # 从任务1回放40个episodes（约20%）

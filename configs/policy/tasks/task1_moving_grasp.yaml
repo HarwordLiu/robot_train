@@ -18,7 +18,7 @@ task:
     root: '/root/robot/data/task-1/1-2000/lerobot/'
     # root: '/mnt/e/robot/data/data/task1/lerobot/1-400/'
     repoid: 'lerobot/task1_moving_grasp'
-    episodes_to_use: [0, 500] # 使用1000个episodes
+    episodes_to_use: [0, 299]
 
   # 训练配置
   training:
@@ -28,9 +28,9 @@ task:
     resume_from: 'pretrained'
     pretrained_path: 'lerobot/smolvla_base' # 使用镜像源下载的预训练模型
 
-    # 优化器配置（任务1使用标准学习率）
+    # 优化器配置（针对batch_size=64优化）
     policy:
-      optimizer_lr: 0.0001 # 标准VLM fine-tuning学习率
-      scheduler_warmup_steps: 2000 # VLM需要更长warmup
-      scheduler_decay_steps: 30000
+      optimizer_lr: 5e-5 # 保守的VLM微调学习率，保证最佳稳定性和效果
+      scheduler_warmup_steps: 1500 # 充分warmup VLM+Action Expert异构架构
+      scheduler_decay_steps: 25000 # Cosine decay到充分收敛
 # 任务1没有replay配置（因为是第一个任务）
