@@ -5,39 +5,42 @@ SmolVLA Policy Deployment Module
 Support for SmolVLA sequential multi-task policy deployment and inference
 """
 
+from kuavo_deploy.utils.logging_utils import setup_logger
+from configs.deploy.config_inference import load_inference_config
+from lerobot.utils.random_utils import set_seed
+from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
+from kuavo_deploy.utils.multi_camera_fusion import create_multi_camera_fusion
+import threading
+import rospy
+from std_msgs.msg import Bool
+from torchvision.transforms import InterpolationMode
+from torchvision.transforms.functional import to_tensor, resize
+from omegaconf import DictConfig, ListConfig, OmegaConf
+import numpy as np
+import time
+import datetime
+from tqdm import tqdm
+import torch
+import numpy
+import imageio
+import gymnasium as gym
+import hydra
+from dataclasses import dataclass, field
+import lerobot_patches.custom_patches
 import sys
 import os
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
-import lerobot_patches.custom_patches
 
-from dataclasses import dataclass, field
-import hydra
-import gymnasium as gym
-import imageio
-import numpy
-import torch
-from tqdm import tqdm
-import datetime
-import time
-import numpy as np
-from omegaconf import DictConfig, ListConfig, OmegaConf
-from torchvision.transforms.functional import to_tensor, resize
-from torchvision.transforms import InterpolationMode
-from std_msgs.msg import Bool
-import rospy
-import threading
+# 导入多相机深度融合模块
 
 # Import SmolVLA modules
-from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
-from lerobot.utils.random_utils import set_seed
 
-from configs.deploy.config_inference import load_inference_config
-from kuavo_deploy.utils.logging_utils import setup_logger
 
 log_model = setup_logger("model")
 log_robot = setup_logger("robot")
+
 
 def pause_callback(msg):
     if msg.data:
@@ -45,14 +48,19 @@ def pause_callback(msg):
     else:
         pause_flag.clear()
 
+
 def stop_callback(msg):
     if msg.data:
         stop_flag.set()
 
-pause_sub = rospy.Subscriber('/kuavo/pause_state', Bool, pause_callback, queue_size=10)
-stop_sub = rospy.Subscriber('/kuavo/stop_state', Bool, stop_callback, queue_size=10)
+
+pause_sub = rospy.Subscriber(
+    '/kuavo/pause_state', Bool, pause_callback, queue_size=10)
+stop_sub = rospy.Subscriber(
+    '/kuavo/stop_state', Bool, stop_callback, queue_size=10)
 stop_flag = threading.Event()
 pause_flag = threading.Event()
+
 
 def img_preprocess_smolvla(image, target_size=(512, 512), device="cpu"):
     """
@@ -81,7 +89,8 @@ def img_preprocess_smolvla(image, target_size=(512, 512), device="cpu"):
     new_h, new_w = int(h * scale), int(w * scale)
 
     # Resize
-    tensor_img = resize(tensor_img, [new_h, new_w], interpolation=InterpolationMode.BILINEAR)
+    tensor_img = resize(
+        tensor_img, [new_h, new_w], interpolation=InterpolationMode.BILINEAR)
 
     # Pad to target size
     pad_h = target_h - new_h
@@ -101,12 +110,14 @@ def img_preprocess_smolvla(image, target_size=(512, 512), device="cpu"):
     # Add batch dimension [1, 3, 512, 512]
     return tensor_img.unsqueeze(0).to(device, non_blocking=True)
 
+
 def depth_preprocess(depth, device="cpu", depth_range=[0, 1000]):
     """Preprocess depth image"""
     depth = np.array(depth)
     depth = np.clip(depth, depth_range[0], depth_range[1])
     depth = (depth - depth_range[0]) / (depth_range[1] - depth_range[0])
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device, non_blocking=True)
+
 
 def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.device("cuda")):
     """
@@ -122,7 +133,8 @@ def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.dev
     """
 
     if device.type == 'cpu':
-        log_model.warning("Warning: Using CPU for inference, this may be slow.")
+        log_model.warning(
+            "Warning: Using CPU for inference, this may be slow.")
         time.sleep(3)
 
     log_model.info("🤖 Loading SmolVLA Policy...")
@@ -140,11 +152,13 @@ def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.dev
     log_model.info(f"🖥️  Model device: {device}")
     log_model.info(f"🔧 Policy type: SmolVLA Sequential")
     log_model.info(f"📊 VLM: {policy.config.vlm_model_name}")
-    log_model.info(f"📊 Action dim: {policy.config.max_action_dim} (Kuavo uses first 16)")
+    log_model.info(
+        f"📊 Action dim: {policy.config.max_action_dim} (Kuavo uses first 16)")
     log_model.info(f"📊 Chunk size: {policy.config.chunk_size}")
     log_model.info(f"📊 Action steps: {policy.config.n_action_steps}")
 
     return policy
+
 
 def main(config_path: str, env: gym.Env):
     """SmolVLA main inference loop"""
@@ -166,7 +180,21 @@ def main(config_path: str, env: gym.Env):
     pretrained_path = f"outputs/train/{cfg.task}/{cfg.method}/{cfg.timestamp}/epoch{cfg.epoch}"
 
     # Load SmolVLA policy
-    policy = setup_smolvla_policy(pretrained_path, language_instruction, device)
+    policy = setup_smolvla_policy(
+        pretrained_path, language_instruction, device)
+
+    # 创建多相机深度融合处理器（只创建一次）
+    fusion_processor = create_multi_camera_fusion(
+        target_size=(512, 512),
+        depth_range=cfg.depth_range,
+        device=device,
+        enable_depth=True  # 启用深度处理
+    )
+
+    log_model.info(
+        f"🚀 Starting SmolVLA inference with multi-camera depth fusion")
+    log_model.info(f"   Depth fusion: Enabled")
+    log_model.info(f"   Camera pairs: {fusion_processor.camera_pairs}")
 
     # Inference loop
     results = []
@@ -195,23 +223,8 @@ def main(config_path: str, env: gym.Env):
                 log_model.info("⏸️  Paused, waiting for resume...")
                 time.sleep(0.1)
 
-            # Preprocess observations
-            observation = {}
-
-            # Process image observations (resize to 512x512 for SmolVLA)
-            for key in obs.keys():
-                if 'image' in key.lower() or 'cam' in key.lower():
-                    observation[f"observation.{key}"] = img_preprocess_smolvla(
-                        obs[key], target_size=(512, 512), device=device
-                    )
-                elif 'depth' in key.lower():
-                    observation[f"observation.{key}"] = depth_preprocess(
-                        obs[key], device, cfg.depth_range
-                    )
-                elif 'state' in key.lower():
-                    observation[f"observation.{key}"] = torch.tensor(
-                        obs[key], dtype=torch.float32
-                    ).unsqueeze(0).to(device)
+            # Preprocess observations with multi-camera depth fusion
+            observation = fusion_processor.process_observations_simple(obs)
 
             # Add language instruction to batch
             observation['task'] = [language_instruction]
@@ -235,8 +248,10 @@ def main(config_path: str, env: gym.Env):
 
             # Log inference time every 100 steps
             if episode_length % 100 == 0:
-                avg_time = np.mean(inference_times[-100:]) if len(inference_times) >= 100 else np.mean(inference_times)
-                log_model.info(f"Step {episode_length}: Avg inference time: {avg_time:.2f}ms")
+                avg_time = np.mean(
+                    inference_times[-100:]) if len(inference_times) >= 100 else np.mean(inference_times)
+                log_model.info(
+                    f"Step {episode_length}: Avg inference time: {avg_time:.2f}ms")
 
             # Execute action
             obs, reward, terminated, truncated, info = env.step(numpy_action)
@@ -260,8 +275,10 @@ def main(config_path: str, env: gym.Env):
         })
 
         # Log episode statistics
-        log_model.info(f"📈 Episode {episode + 1} - Reward: {episode_reward:.3f}, Length: {episode_length}, Success: {success}")
-        log_model.info(f"⏱️  Average inference time: {avg_inference_time:.2f}ms")
+        log_model.info(
+            f"📈 Episode {episode + 1} - Reward: {episode_reward:.3f}, Length: {episode_length}, Success: {success}")
+        log_model.info(
+            f"⏱️  Average inference time: {avg_inference_time:.2f}ms")
 
         if stop_flag.is_set():
             break
@@ -282,8 +299,11 @@ def main(config_path: str, env: gym.Env):
     return results
 
 # Compatibility interface
+
+
 def setup_policy(pretrained_path, policy_type, device=torch.device("cuda"), language_instruction=""):
     """Compatibility interface"""
     if policy_type != 'smolvla':
-        raise ValueError(f"This script only supports 'smolvla' policy, got '{policy_type}'")
+        raise ValueError(
+            f"This script only supports 'smolvla' policy, got '{policy_type}'")
     return setup_smolvla_policy(pretrained_path, language_instruction, device)

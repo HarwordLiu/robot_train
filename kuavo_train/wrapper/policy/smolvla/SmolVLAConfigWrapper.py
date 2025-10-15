@@ -7,7 +7,7 @@ SmolVLA Configuration Wrapper for Kuavo Project
 from dataclasses import dataclass, fields
 from pathlib import Path
 from copy import deepcopy
-from typing import TypeVar
+from typing import TypeVar, List, Tuple
 import torch
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.configs.policies import PreTrainedConfig, PolicyFeature
@@ -19,18 +19,90 @@ T = TypeVar("T", bound="SmolVLAConfigWrapper")
 @dataclass
 class SmolVLAConfigWrapper(SmolVLAConfig):
     """
-    Kuavo项目的SmolVLA配置扩展类
+    Kuavo项目的SmolVLA配置扩展类 - 支持深度相机
 
-    继承SmolVLAConfig的所有功能，可以添加Kuavo特定的配置项
-
-    当前直接继承SmolVLAConfig，未来可以添加：
-    - Kuavo特定的相机配置
-    - 双臂机器人特定参数
-    - 自定义的训练策略
+    继承SmolVLAConfig的所有功能，添加深度相机支持：
+    - 深度相机配置
+    - 多相机融合参数
+    - 深度图像预处理设置
 
     重要：自动将所有 OmegaConf 对象转换为原生 Python 对象，
     确保可以使用 lerobot 的标准保存方式，无需依赖 omegaconf。
     """
+
+    # 深度相机支持
+    use_depth: bool = True
+    depth_features: List[str] = None
+
+    # 深度图像预处理
+    depth_resize_with_padding: List[int] = None
+    depth_normalization_range: List[float] = None
+
+    def __post_init__(self):
+        """
+        后初始化处理
+
+        1. 设置默认值
+        2. 转换 OmegaConf 对象为原生 Python 对象
+        3. 重新将 input_features 和 output_features 转换为 PolicyFeature 对象
+        4. 执行父类的验证逻辑
+        5. 执行 Kuavo 特定的配置验证
+        """
+        # 设置默认值
+        if self.depth_features is None:
+            self.depth_features = [
+                "observation.depth_h", "observation.depth_l", "observation.depth_r"
+            ]
+
+        if self.depth_resize_with_padding is None:
+            self.depth_resize_with_padding = [512, 512]
+
+        if self.depth_normalization_range is None:
+            self.depth_normalization_range = [0.0, 1000.0]
+
+        # 第一步：转换 OmegaConf 对象（必须在父类 __post_init__ 之前）
+        self._convert_omegaconf_to_native()
+
+        # 第二步：重新将 features 转换为 PolicyFeature 对象
+        # 这是必要的，因为 _convert_omegaconf_to_native 会将它们转换为字典
+        if hasattr(self, 'input_features') and self.input_features is not None:
+            self.input_features = self._normalize_feature_dict(
+                self.input_features)
+        if hasattr(self, 'output_features') and self.output_features is not None:
+            self.output_features = self._normalize_feature_dict(
+                self.output_features)
+
+        # 第三步：调用父类的后初始化
+        super().__post_init__()
+
+        # 验证深度配置
+        if self.use_depth and not self.depth_features:
+            raise ValueError("use_depth=True but no depth_features specified")
+
+        # 注意：为了使用SmolVLA预训练权重，max_action_dim和max_state_dim应该为32（与预训练模型一致）
+        # Kuavo实际是16维，数据会在加载时自动填充到32维
+        if self.max_action_dim == 32 and self.max_state_dim == 32:
+            print(
+                "✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
+        elif self.max_action_dim != 32 or self.max_state_dim != 32:
+            print(
+                f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
+            print(
+                f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
+
+        # 打印SmolVLA配置摘要
+        print(f"📋 SmolVLA Config Summary (Kuavo with Depth):")
+        print(f"   - VLM Model: {self.vlm_model_name}")
+        print(
+            f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
+        print(
+            f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
+        print(f"   - Chunk Size: {self.chunk_size}")
+        print(f"   - Action Steps: {self.n_action_steps}")
+        print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
+        print(f"   - Train Expert Only: {self.train_expert_only}")
+        print(f"   - Use Depth: {self.use_depth}")
+        print(f"   - Depth Features: {self.depth_features}")
 
     def _convert_omegaconf_to_native(self):
         """
@@ -59,7 +131,7 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         """
         将字典格式的 features 转换为 PolicyFeature 对象
 
-        当 OmegaConf 配置被转换为原生 Python 对象后，input_features 和 output_features 
+        当 OmegaConf 配置被转换为原生 Python 对象后，input_features 和 output_features
         会变成字典，需要重新转换为 PolicyFeature 对象以供策略模型使用。
 
         Args:
@@ -72,7 +144,8 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
             return d
 
         return {
-            k: PolicyFeature(**v) if isinstance(v, dict) and not isinstance(v, PolicyFeature) else v
+            k: PolicyFeature(**v) if isinstance(v,
+                                                dict) and not isinstance(v, PolicyFeature) else v
             for k, v in d.items()
         }
 
@@ -91,9 +164,11 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         # 第二步：重新将 features 转换为 PolicyFeature 对象
         # 这是必要的，因为 _convert_omegaconf_to_native 会将它们转换为字典
         if hasattr(self, 'input_features') and self.input_features is not None:
-            self.input_features = self._normalize_feature_dict(self.input_features)
+            self.input_features = self._normalize_feature_dict(
+                self.input_features)
         if hasattr(self, 'output_features') and self.output_features is not None:
-            self.output_features = self._normalize_feature_dict(self.output_features)
+            self.output_features = self._normalize_feature_dict(
+                self.output_features)
 
         # 第三步：调用父类的后初始化
         super().__post_init__()
@@ -101,16 +176,21 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         # 注意：为了使用SmolVLA预训练权重，max_action_dim和max_state_dim应该为32（与预训练模型一致）
         # Kuavo实际是16维，数据会在加载时自动填充到32维
         if self.max_action_dim == 32 and self.max_state_dim == 32:
-            print("✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
+            print(
+                "✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
         elif self.max_action_dim != 32 or self.max_state_dim != 32:
-            print(f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
-            print(f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
+            print(
+                f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
+            print(
+                f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
 
         # 打印SmolVLA配置摘要
         print(f"📋 SmolVLA Config Summary (Kuavo):")
         print(f"   - VLM Model: {self.vlm_model_name}")
-        print(f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
-        print(f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
+        print(
+            f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
+        print(
+            f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
         print(f"   - Chunk Size: {self.chunk_size}")
         print(f"   - Action Steps: {self.n_action_steps}")
         print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
@@ -160,17 +240,17 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         从预训练路径加载配置
 
         这个方法调用父类的 from_pretrained，确保正确处理配置文件中的 type 字段。
-        
+
         Args:
             pretrained_name_or_path: 预训练模型路径或 HuggingFace 模型 ID
             其他参数同 PreTrainedConfig.from_pretrained
-            
+
         Returns:
             加载的配置对象
         """
         # 调用父类 PreTrainedConfig 的 from_pretrained，触发 Choice 机制识别子类
         parent_cls = PreTrainedConfig
-        
+
         return parent_cls.from_pretrained(
             pretrained_name_or_path,
             force_download=force_download,
