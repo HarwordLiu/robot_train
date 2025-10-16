@@ -104,6 +104,8 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         print(f"   - Train Expert Only: {self.train_expert_only}")
         print(f"   - Use Depth: {self.use_depth}")
         print(f"   - Depth Features: {self.depth_features}")
+        print(
+            f"   - Use Depth Padding: {self.use_depth_padding} {'(高精度模式)' if self.use_depth_padding else '(快速模式)'}")
 
     def _convert_omegaconf_to_native(self):
         """
