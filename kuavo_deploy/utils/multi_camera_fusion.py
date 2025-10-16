@@ -22,7 +22,8 @@ class MultiCameraDepthFusion:
                  target_size: Tuple[int, int] = (512, 512),
                  depth_range: Tuple[float, float] = (0, 1000),
                  device: str = 'cpu',
-                 enable_depth: bool = True):
+                 enable_depth: bool = True,
+                 use_depth_padding: bool = True):
         """
         初始化多相机深度融合器
 
@@ -31,11 +32,13 @@ class MultiCameraDepthFusion:
             depth_range: 深度值范围 (min_depth, max_depth)
             device: 设备
             enable_depth: 是否启用深度处理
+            use_depth_padding: 深度图是否使用padding方式 (推荐True用于高精度任务)
         """
         self.target_size = target_size
         self.depth_range = depth_range
         self.device = device
         self.enable_depth = enable_depth
+        self.use_depth_padding = use_depth_padding
 
         # 相机配对映射
         self.camera_pairs = {
@@ -55,6 +58,8 @@ class MultiCameraDepthFusion:
         print(f"   Depth range: {depth_range}")
         print(f"   Device: {device}")
         print(f"   Enable depth: {enable_depth}")
+        print(
+            f"   Use depth padding: {use_depth_padding} {'(高精度模式)' if use_depth_padding else '(快速模式)'}")
         print(f"   Camera pairs: {self.camera_pairs}")
 
     def img_preprocess_smolvla(self, image: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
@@ -140,7 +145,8 @@ class MultiCameraDepthFusion:
                 depth_image,
                 target_size=self.target_size,
                 depth_range=self.depth_range,
-                device=self.device
+                device=self.device,
+                use_padding=self.use_depth_padding
             )
             processed_data[f"observation.{depth_key}"] = depth_rgb
 
@@ -200,7 +206,8 @@ class MultiCameraDepthFusion:
                         obs[camera],
                         target_size=self.target_size,
                         depth_range=self.depth_range,
-                        device=self.device
+                        device=self.device,
+                        use_padding=self.use_depth_padding
                     )
                     observation[f"observation.{camera}"] = depth_rgb
 
@@ -235,7 +242,8 @@ class MultiCameraDepthFusion:
 def create_multi_camera_fusion(target_size: Tuple[int, int] = (512, 512),
                                depth_range: Tuple[float, float] = (0, 1000),
                                device: str = 'cpu',
-                               enable_depth: bool = True) -> MultiCameraDepthFusion:
+                               enable_depth: bool = True,
+                               use_depth_padding: bool = True) -> MultiCameraDepthFusion:
     """
     创建多相机深度融合器
 
@@ -244,6 +252,7 @@ def create_multi_camera_fusion(target_size: Tuple[int, int] = (512, 512),
         depth_range: 深度值范围
         device: 设备
         enable_depth: 是否启用深度处理
+        use_depth_padding: 深度图是否使用padding方式 (推荐True用于高精度任务)
 
     Returns:
         fusion_processor: 深度融合处理器
@@ -252,7 +261,8 @@ def create_multi_camera_fusion(target_size: Tuple[int, int] = (512, 512),
         target_size=target_size,
         depth_range=depth_range,
         device=device,
-        enable_depth=enable_depth
+        enable_depth=enable_depth,
+        use_depth_padding=use_depth_padding
     )
 
 

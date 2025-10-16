@@ -24,6 +24,7 @@ depth_range: [0, 1000] # Depth image clipping range (mm)
 image_size: [480, 640] # Original ROS topic image size
 target_image_size: [512, 512] # SmolVLA requires 512x512 (NOT 224x224!)
 ros_rate: 10 # Inference frequency (Hz)
+use_depth_padding: True # 深度图使用padding方式保持长宽比 (推荐用于高精度任务)
 
 # End-effector DOF configuration
 qiangnao_dof_needed: 1

@@ -58,6 +58,7 @@ policy:
     - 'observation.depth_r'
   depth_resize_with_padding: [512, 512] # 深度图像目标尺寸
   depth_normalization_range: [0.0, 1000.0] # 深度值归一化范围
+  use_depth_padding: True # 深度图使用padding方式保持长宽比 (推荐用于高精度任务)
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
   num_steps: 10 # 推理时的去噪步数

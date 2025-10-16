@@ -145,15 +145,21 @@ def jet_colormap(value: float) -> Tuple[float, float, float]:
 def depth_to_rgb_for_smolvla(depth_image: Union[np.ndarray, torch.Tensor],
                              target_size: Tuple[int, int] = (512, 512),
                              depth_range: Tuple[float, float] = (0, 1000),
-                             device: str = 'cpu') -> torch.Tensor:
+                             device: str = 'cpu',
+                             use_padding: bool = True) -> torch.Tensor:
     """
     为SmolVLA将深度图像转换为RGB伪彩色张量
+
+    支持两种处理方式：
+    1. use_padding=True: 保持长宽比，用padding填充 (推荐用于高精度任务)
+    2. use_padding=False: 直接resize到目标尺寸 (快速处理)
 
     Args:
         depth_image: 深度图像 [H, W] 或 [H, W, 1]
         target_size: 目标尺寸 (height, width)
         depth_range: 深度值范围 (min_depth, max_depth)
         device: 设备
+        use_padding: 是否使用padding方式保持长宽比
 
     Returns:
         rgb_tensor: RGB张量 [1, 3, H, W]
@@ -171,16 +177,72 @@ def depth_to_rgb_for_smolvla(depth_image: Union[np.ndarray, torch.Tensor],
     # 转换为RGB伪彩色
     rgb_image = depth_to_rgb_opencv(depth_np, cv2.COLORMAP_JET, depth_range)
 
-    # 调整尺寸到目标大小
-    if rgb_image.shape[:2] != target_size:
-        rgb_image = cv2.resize(
-            rgb_image, target_size[::-1], interpolation=cv2.INTER_LINEAR)
+    if use_padding:
+        # 使用padding方式保持长宽比
+        rgb_tensor = _resize_with_padding(rgb_image, target_size, device)
+    else:
+        # 直接resize到目标尺寸
+        if rgb_image.shape[:2] != target_size:
+            rgb_image = cv2.resize(
+                rgb_image, target_size[::-1], interpolation=cv2.INTER_LINEAR)
 
-    # 转换为PyTorch张量
-    rgb_tensor = torch.from_numpy(rgb_image).permute(2, 0, 1).float() / 255.0
-    rgb_tensor = rgb_tensor.unsqueeze(0)  # 添加batch维度 [1, 3, H, W]
+        # 转换为PyTorch张量
+        rgb_tensor = torch.from_numpy(
+            rgb_image).permute(2, 0, 1).float() / 255.0
+        rgb_tensor = rgb_tensor.unsqueeze(0)  # 添加batch维度 [1, 3, H, W]
+        rgb_tensor = rgb_tensor.to(device)
 
-    return rgb_tensor.to(device)
+    return rgb_tensor
+
+
+def _resize_with_padding(rgb_image: np.ndarray,
+                         target_size: Tuple[int, int],
+                         device: str) -> torch.Tensor:
+    """
+    使用padding方式调整图像尺寸，保持长宽比
+
+    Args:
+        rgb_image: RGB图像 [H, W, 3]
+        target_size: 目标尺寸 (height, width)
+        device: 设备
+
+    Returns:
+        rgb_tensor: RGB张量 [1, 3, H, W]
+    """
+    from torchvision.transforms import functional as F
+    from torchvision.transforms import InterpolationMode
+
+    # 转换为tensor
+    tensor_img = torch.from_numpy(rgb_image).permute(2, 0, 1).float() / 255.0
+
+    h, w = tensor_img.shape[-2:]
+    target_h, target_w = target_size
+
+    # 计算缩放比例（保持长宽比）
+    scale = min(target_h / h, target_w / w)
+    new_h, new_w = int(h * scale), int(w * scale)
+
+    # Resize
+    tensor_img = F.resize(
+        tensor_img, [new_h, new_w], interpolation=InterpolationMode.BILINEAR)
+
+    # Pad到目标尺寸
+    pad_h = target_h - new_h
+    pad_w = target_w - new_w
+    pad_top = pad_h // 2
+    pad_bottom = pad_h - pad_top
+    pad_left = pad_w // 2
+    pad_right = pad_w - pad_left
+
+    tensor_img = torch.nn.functional.pad(
+        tensor_img,
+        (pad_left, pad_right, pad_top, pad_bottom),
+        mode='constant',
+        value=0  # 用0填充（深度=0表示无效区域）
+    )
+
+    # 添加batch维度
+    return tensor_img.unsqueeze(0).to(device, non_blocking=True)
 
 
 def benchmark_depth_conversion():
