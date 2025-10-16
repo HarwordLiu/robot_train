@@ -990,19 +990,21 @@ def main(cfg: DictConfig):
             )
 
         avg_loss = total_loss / num_batches
-        
+
         # 计算epoch训练时间
         epoch_end_time = time.time()
         epoch_duration = epoch_end_time - epoch_start_time
         epoch_duration_minutes = epoch_duration / 60
-        
+
         print(f"Epoch {epoch+1} Average Loss: {avg_loss:.4f}")
-        print(f"⏱️  Epoch {epoch+1} 训练完成，用时: {epoch_duration_minutes:.2f} 分钟 ({epoch_duration:.1f} 秒)")
+        print(
+            f"⏱️  Epoch {epoch+1} 训练完成，用时: {epoch_duration_minutes:.2f} 分钟 ({epoch_duration:.1f} 秒)")
 
         # TensorBoard logging
         writer.add_scalar("train/loss", avg_loss, epoch)
         writer.add_scalar("train/lr", lr_scheduler.get_last_lr()[0], epoch)
-        writer.add_scalar("train/epoch_duration_minutes", epoch_duration_minutes, epoch)
+        writer.add_scalar("train/epoch_duration_minutes",
+                          epoch_duration_minutes, epoch)
 
         # 多任务验证
         if (epoch + 1) % cfg.training.validation_freq_epoch == 0:
