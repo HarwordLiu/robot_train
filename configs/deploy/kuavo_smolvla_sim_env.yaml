@@ -84,8 +84,8 @@ epoch: 3 # Test epoch 10 model (loss ~0.02)
 # SmolVLA uses language instructions to condition the policy
 # Change this based on which task you're evaluating
 
-# Task 1: Moving target grasping (强调中心对齐)
-language_instruction: 'Grasp the object from the conveyor belt using visual guidance. Place it precisely at the first marked target location with the object center aligned to the marker center. Then grasp it again and place it precisely at the second marked target location with the object center perfectly aligned to the marker center.'
+# Task 1: Moving target grasping
+language_instruction: 'Grasp the object from the conveyor belt using visual guidance. Place it precisely at the first marked target location on the table. Then grasp it again and place it precisely at the second marked target location on the table.'
 
 # Task 2: Package weighing (uncomment to use)
 # language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
