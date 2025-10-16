@@ -53,6 +53,7 @@ import hydra
 import lerobot_patches.custom_patches
 
 import os
+import time
 # 消除tokenizers fork警告
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
@@ -387,8 +388,11 @@ def create_dataloader_with_language(
                 # 合并为batch [B, 3, 512, 512]
                 batch_dict[key] = torch.cat(rgb_depth_list, dim=0)
 
-                print(
-                    f"✅ Converted {key}: {depth_data.shape} -> {batch_dict[key].shape}")
+                # 只在第一个batch打印转换信息，避免日志过多
+                if not hasattr(collate_fn_with_language, '_conversion_logged'):
+                    print(
+                        f"✅ Converted {key}: {depth_data.shape} -> {batch_dict[key].shape}")
+                    collate_fn_with_language._conversion_logged = True
 
         # 填充action和state维度（从Kuavo的16维到SmolVLA的32维）
         for key in batch_dict.keys():
@@ -581,8 +585,12 @@ def create_mixed_dataloader(
                     rgb_depth_list.append(rgb_depth)
 
                 batch_dict[key] = torch.cat(rgb_depth_list, dim=0)
-                print(
-                    f"✅ Mixed Dataset Converted {key}: {depth_data.shape} -> {batch_dict[key].shape}")
+
+                # 只在第一个batch打印转换信息，避免日志过多
+                if not hasattr(collate_fn_with_padding, '_conversion_logged'):
+                    print(
+                        f"✅ Mixed Dataset Converted {key}: {depth_data.shape} -> {batch_dict[key].shape}")
+                    collate_fn_with_padding._conversion_logged = True
 
         # 填充action和state维度
         target_action_dim = cfg.policy.max_action_dim
@@ -936,6 +944,9 @@ def main(cfg: DictConfig):
         print(f"Epoch {epoch + 1}/{task_cfg.task.training.max_epoch}")
         print(f"{'='*70}")
 
+        # 记录epoch开始时间
+        epoch_start_time = time.time()
+
         # 训练
         policy.train()
         total_loss = 0.0
@@ -979,11 +990,19 @@ def main(cfg: DictConfig):
             )
 
         avg_loss = total_loss / num_batches
+        
+        # 计算epoch训练时间
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+        epoch_duration_minutes = epoch_duration / 60
+        
         print(f"Epoch {epoch+1} Average Loss: {avg_loss:.4f}")
+        print(f"⏱️  Epoch {epoch+1} 训练完成，用时: {epoch_duration_minutes:.2f} 分钟 ({epoch_duration:.1f} 秒)")
 
         # TensorBoard logging
         writer.add_scalar("train/loss", avg_loss, epoch)
         writer.add_scalar("train/lr", lr_scheduler.get_last_lr()[0], epoch)
+        writer.add_scalar("train/epoch_duration_minutes", epoch_duration_minutes, epoch)
 
         # 多任务验证
         if (epoch + 1) % cfg.training.validation_freq_epoch == 0:
