@@ -30,6 +30,8 @@ SmolVLA顺序多任务训练脚本
 """
 
 # Ensure custom patches are applied
+import cv2
+from kuavo_deploy.utils.depth_conversion import depth_to_rgb_for_smolvla
 from kuavo_train.utils.utils import save_rng_state, load_rng_state
 from kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper import SmolVLAConfigWrapper
 from kuavo_train.wrapper.policy.smolvla.SmolVLAPolicyWrapper import SmolVLAPolicyWrapper
@@ -56,6 +58,8 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 
 # 导入SmolVLA模块
+
+# 导入深度处理模块（用于训练-推理一致性）
 
 # 导入训练状态保存/加载工具
 
@@ -348,7 +352,7 @@ def create_dataloader_with_language(
     """
 
     def collate_fn_with_language(batch):
-        """为batch添加language instruction并填充action/state维度"""
+        """为batch添加language instruction、填充action/state维度、转换深度为RGB"""
         # 使用默认collate
         from torch.utils.data._utils.collate import default_collate
         batch_dict = default_collate(batch)
@@ -356,6 +360,35 @@ def create_dataloader_with_language(
         # 添加task字段
         batch_size = batch_dict[list(batch_dict.keys())[0]].shape[0]
         batch_dict['task'] = [language_instruction] * batch_size
+
+        # 🆕 转换深度数据为RGB伪彩色（与推理保持一致）
+        depth_keys = [key for key in batch_dict.keys()
+                      if 'depth' in key.lower()]
+        if depth_keys:
+            for key in depth_keys:
+                depth_data = batch_dict[key]  # [B, 1, H, W], uint16
+
+                # 转换每个batch的深度图像
+                rgb_depth_list = []
+                for i in range(depth_data.shape[0]):
+                    # 提取单张深度图 [1, H, W]
+                    single_depth = depth_data[i]  # [1, H, W]
+
+                    # 转换为RGB伪彩色 [1, 3, 512, 512]
+                    rgb_depth = depth_to_rgb_for_smolvla(
+                        depth_image=single_depth.squeeze(0).numpy(),  # [H, W]
+                        target_size=(512, 512),
+                        # 与配置中的depth_normalization_range一致
+                        depth_range=(0, 1000),
+                        device='cpu'  # collate在CPU上进行
+                    )
+                    rgb_depth_list.append(rgb_depth)
+
+                # 合并为batch [B, 3, 512, 512]
+                batch_dict[key] = torch.cat(rgb_depth_list, dim=0)
+
+                print(
+                    f"✅ Converted {key}: {depth_data.shape} -> {batch_dict[key].shape}")
 
         # 填充action和state维度（从Kuavo的16维到SmolVLA的32维）
         for key in batch_dict.keys():
@@ -516,7 +549,7 @@ def create_mixed_dataloader(
     print(f"   Weights: {mixed_dataset.weights}")
 
     def collate_fn_with_padding(batch):
-        """collate函数：处理mixed dataset的batch并填充维度"""
+        """collate函数：处理mixed dataset的batch、填充维度、转换深度"""
         from torch.utils.data._utils.collate import default_collate
 
         # batch中的每个sample已经有'task'字段了
@@ -528,6 +561,28 @@ def create_mixed_dataloader(
 
         # 添加task字段回去
         batch_dict['task'] = tasks
+
+        # 🆕 转换深度数据为RGB伪彩色
+        depth_keys = [key for key in batch_dict.keys()
+                      if 'depth' in key.lower()]
+        if depth_keys:
+            for key in depth_keys:
+                depth_data = batch_dict[key]  # [B, 1, H, W], uint16
+
+                rgb_depth_list = []
+                for i in range(depth_data.shape[0]):
+                    single_depth = depth_data[i]
+                    rgb_depth = depth_to_rgb_for_smolvla(
+                        depth_image=single_depth.squeeze(0).numpy(),
+                        target_size=(512, 512),
+                        depth_range=(0, 1000),
+                        device='cpu'
+                    )
+                    rgb_depth_list.append(rgb_depth)
+
+                batch_dict[key] = torch.cat(rgb_depth_list, dim=0)
+                print(
+                    f"✅ Mixed Dataset Converted {key}: {depth_data.shape} -> {batch_dict[key].shape}")
 
         # 填充action和state维度
         target_action_dim = cfg.policy.max_action_dim
@@ -832,6 +887,43 @@ def main(cfg: DictConfig):
     print(f"   Steps per Epoch: {len(dataloader)}")
     print(
         f"   Total Steps: {task_cfg.task.training.max_epoch * len(dataloader)}")
+
+    # ==================== 数据格式验证 ====================
+    print("\n" + "="*70)
+    print("🔍 验证训练数据格式（训练-推理一致性检查）")
+    print("="*70)
+
+    # 获取一个batch验证格式
+    for batch in dataloader:
+        print("\n📊 Batch数据格式：")
+        for key, value in batch.items():
+            if isinstance(value, torch.Tensor):
+                print(f"  {key}: shape={value.shape}, dtype={value.dtype}")
+
+                # 特别检查深度数据
+                if 'depth' in key.lower():
+                    print(f"    ✅ 深度数据格式检查：")
+                    print(f"       - 通道数: {value.shape[1]} (期望: 3)")
+                    print(f"       - 尺寸: {value.shape[2:]} (期望: [512, 512])")
+                    print(f"       - 数据类型: {value.dtype} (期望: torch.float32)")
+                    print(
+                        f"       - 值范围: [{value.min():.3f}, {value.max():.3f}] (期望: [0.0, 1.0])")
+
+                    # 验证是否符合预期
+                    try:
+                        assert value.shape[1] == 3, f"❌ 深度通道数错误: {value.shape[1]} != 3"
+                        assert value.shape[2:] == (
+                            512, 512), f"❌ 深度尺寸错误: {value.shape[2:]} != (512, 512)"
+                        assert value.dtype == torch.float32, f"❌ 深度数据类型错误: {value.dtype} != torch.float32"
+                        print(f"       ✅ 格式验证通过！")
+                    except AssertionError as e:
+                        print(f"       ❌ 格式验证失败: {e}")
+                        raise e
+
+        # 只检查第一个batch
+        break
+
+    print("="*70 + "\n")
 
     # ==================== 训练循环 ====================
     print("\n🚀 Starting Training...")

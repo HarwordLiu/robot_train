@@ -183,6 +183,8 @@ def create_empty_dataset(
             features[f"observation.{cam}"] = {
                 "dtype": "uint16",
                 # Attention: for datasets.features "image" and "video", it must be c,h,w style!
+                # Note: 深度数据在训练时会被转换为RGB伪彩色格式 [3, 512, 512], float32
+                # 这里存储原始深度值 [1, H, W], uint16 以节省存储空间
                 "shape": (1, kuavo.RESIZE_H, kuavo.RESIZE_W),
                 "names": [
                     "channels",
