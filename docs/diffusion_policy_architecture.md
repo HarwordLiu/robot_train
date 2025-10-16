@@ -1870,6 +1870,594 @@ def main(cfg: DictConfig):
 
 ---
 
+## 10. SMOLVLA 数据流概览
+
+### 10.1 SMOLVLA 架构特点
+
+SMOLVLA (Small Vision-Language-Action) 是基于 HuggingFace SmolVLM2-500M-Video-Instruct 预训练模型的轻量级视觉-语言-动作策略，采用 Flow Matching 进行动作生成。
+
+**核心特点**:
+- **轻量级**: 500M参数，适合实时部署
+- **多任务学习**: 支持4个连续任务的顺序学习
+- **防遗忘技术**: 使用 Replay Buffer 防止灾难性遗忘
+- **Flow Matching**: 使用 Flow Matching 而非传统 Diffusion
+- **维度适配**: 自动处理 Kuavo 16维到 SmolVLA 32维的维度转换
+
+### 10.2 SMOLVLA 数据流概览
+
+```
+观测数据
+  ├─► RGB Images [B, n_cam, 3, H, W]
+  │   ├─► head_cam_h: [B, 3, 480, 640]
+  │   ├─► wrist_cam_l: [B, 3, 480, 640]
+  │   └─► wrist_cam_r: [B, 3, 480, 640]
+  │
+  ├─► Depth Images [B, n_cam, 1, H, W]
+  │   ├─► depth_h: [B, 1, 480, 640]
+  │   ├─► depth_l: [B, 1, 480, 640]
+  │   └─► depth_r: [B, 1, 480, 640]
+  │
+  ├─► Robot State [B, 16] (Kuavo实际维度)
+  └─► Language Instruction [str]
+        │
+        ▼
+图像预处理
+  ├─► RGB: Resize + Padding → [B, n_cam, 3, 512, 512]
+  ├─► Depth: 深度转RGB伪彩色 → [B, n_cam, 3, 512, 512]
+  └─► State: 维度填充 16→32 → [B, 32]
+        │
+        ▼
+VLM Backbone (SmolVLM2-500M)
+  ├─► SigLIP视觉编码器 (冻结)
+  │   ├─► RGB特征提取: [B, n_cam, 3, 512, 512] → [B, n_cam, feat_dim]
+  │   └─► Depth特征提取: [B, n_cam, 3, 512, 512] → [B, n_cam, feat_dim]
+  │
+  ├─► 语言理解模块
+  │   └─► Language Instruction → Language Embedding [B, lang_dim]
+  │
+  └─► 多模态融合
+      ├─► 视觉特征聚合: [B, n_cam, feat_dim] → [B, visual_dim]
+      ├─► 语言-视觉对齐: Language ⊗ Visual → [B, fused_dim]
+      └─► 状态特征投影: [B, 32] → [B, state_dim]
+        │
+        ▼
+全局条件 global_cond [B, cond_dim]
+  ├─► Visual Features: [B, visual_dim]
+  ├─► Language Features: [B, lang_dim]
+  └─► State Features: [B, state_dim]
+        │
+        ▼
+Action Expert (Transformer Decoder)
+  ├─► 输入嵌入: global_cond → [B, T, n_emb]
+  ├─► Transformer解码: 生成动作序列特征
+  └─► 输出投影: [B, T, n_emb] → [B, chunk_size, 32]
+        │
+        ▼
+Flow Matching (训练)
+  ├─► 1. 对真实动作添加噪声: action + ε ~ N(0, I)
+  ├─► 2. Transformer预测噪声: ε_pred = ActionExpert(noisy_action, global_cond)
+  └─► 3. 计算损失: L = ||ε - ε_pred||²
+        │
+        ▼
+Flow Matching (推理)
+  ├─► 1. 从纯噪声开始: action_T ~ N(0, I)
+  ├─► 2. 逐步去噪 (10步 → 0步)
+  │      for t in [10, 9, ..., 1]:
+  │        ε_pred = ActionExpert(action_t, global_cond)
+  │        action_{t-1} = flow_step(action_t, ε_pred, t)
+  └─► 3. 输出最终动作: action_0 [B, chunk_size, 32]
+        │
+        ▼
+动作后处理
+  ├─► 维度裁剪: [B, chunk_size, 32] → [B, chunk_size, 16]
+  ├─► 反归一化: 恢复原始动作范围
+  └─► Action Queue: 缓存动作序列，每次执行 n_action_steps 步
+```
+
+### 10.3 多任务学习数据流
+
+#### 10.3.1 顺序训练流程
+
+```
+Stage 1: 预训练模型 → 任务1模型 (移动抓取)
+  ├─► 数据: 任务1数据 (100%)
+  ├─► 学习率: 5e-5
+  └─► 训练: 100 epochs
+
+Stage 2: 任务1模型 → 任务2模型 (快递称重)
+  ├─► 数据: 20% 任务1 + 80% 任务2 (Replay Buffer)
+  ├─► 学习率: 3.5e-5 (降低30%)
+  └─► 训练: 25 epochs
+
+Stage 3: 任务2模型 → 任务3模型 (定姿摆放)
+  ├─► 数据: 10% 任务1 + 20% 任务2 + 70% 任务3
+  ├─► 学习率: 2.5e-5 (进一步降低)
+  └─► 训练: 25 epochs
+
+Stage 4: 任务3模型 → 任务4模型 (全流程分拣)
+  ├─► 数据: 10% 任务1 + 10% 任务2 + 20% 任务3 + 60% 任务4
+  ├─► 学习率: 2e-5 (最低学习率)
+  └─► 训练: 25 epochs
+```
+
+#### 10.3.2 Replay Buffer 机制
+
+```python
+class ReplayDatasetManager:
+    """管理Replay Buffer的类"""
+
+    def load_replay_tasks(self):
+        """加载所有需要replay的任务数据"""
+        # Stage 2: 20% 任务1 + 80% 任务2
+        # Stage 3: 10% 任务1 + 20% 任务2 + 70% 任务3
+        # Stage 4: 10% 任务1 + 10% 任务2 + 20% 任务3 + 60% 任务4
+
+        replay_datasets = {}
+        replay_weights = {}
+
+        for task_id, weight in replay_config.items():
+            # 加载之前任务的数据
+            dataset = LeRobotDataset(
+                task_cfg.task.data.repoid,
+                root=task_cfg.task.data.root,
+                episodes=episodes_range,
+                delta_timestamps=delta_timestamps
+            )
+            replay_datasets[task_id] = dataset
+            replay_weights[task_id] = weight
+
+        return replay_datasets, replay_weights
+
+class MixedDataset(torch.utils.data.Dataset):
+    """混合多个数据集，每个数据集保留自己的language instruction"""
+
+    def __getitem__(self, idx):
+        # 根据weights随机选择一个dataset
+        dataset_idx = self.weighted_sampler.sample()
+        dataset = self.datasets[dataset_idx]
+
+        # 从该dataset随机选择一个样本
+        sample = dataset[random.randint(0, len(dataset)-1)]
+
+        # 添加对应的language instruction
+        sample['task'] = [self.language_instructions[dataset_idx]]
+
+        return sample
+```
+
+### 10.4 深度融合处理
+
+#### 10.4.1 深度转RGB伪彩色
+
+```python
+def depth_to_rgb_for_smolvla(depth_image, target_size=(512, 512),
+                           depth_range=(0, 1000), device='cpu'):
+    """
+    将深度图像转换为RGB伪彩色图像
+
+    Args:
+        depth_image: [H, W] 深度图像 (uint16)
+        target_size: 目标尺寸 (512, 512)
+        depth_range: 深度范围 (0, 1000) mm
+
+    Returns:
+        rgb_tensor: [3, H, W] RGB伪彩色图像
+    """
+    # 1. 归一化深度值到 [0, 1]
+    depth_normalized = np.clip(depth_image, depth_range[0], depth_range[1])
+    depth_normalized = (depth_normalized - depth_range[0]) / (depth_range[1] - depth_range[0])
+
+    # 2. 应用Jet颜色映射
+    rgb_image = apply_jet_colormap(depth_normalized)
+
+    # 3. 调整尺寸
+    rgb_resized = cv2.resize(rgb_image, target_size)
+
+    # 4. 转换为tensor
+    rgb_tensor = torch.from_numpy(rgb_resized).permute(2, 0, 1).float()
+
+    return rgb_tensor
+
+def apply_jet_colormap(value):
+    """Jet颜色映射函数"""
+    if value < 0.125:
+        r, g, b = 0, 0, 0.5 + 4 * value
+    elif value < 0.375:
+        r, g, b = 0, 4 * (value - 0.125), 1
+    elif value < 0.625:
+        r, g, b = 0, 1, 1 - 4 * (value - 0.375)
+    elif value < 0.875:
+        r, g, b = 4 * (value - 0.625), 1, 0
+    else:
+        r, g, b = 1, 1 - 4 * (value - 0.875), 0
+    return r, g, b
+```
+
+#### 10.4.2 多相机融合
+
+```python
+class MultiCameraDepthFusion:
+    """多相机深度融合处理器"""
+
+    def process_observations_simple(self, obs):
+        """
+        处理多相机观测数据
+
+        Args:
+            obs: 原始观测数据
+                - head_cam_h: [480, 640, 3]
+                - depth_h: [480, 640, 1]
+                - wrist_cam_l: [480, 640, 3]
+                - depth_l: [480, 640, 1]
+                - wrist_cam_r: [480, 640, 3]
+                - depth_r: [480, 640, 1]
+                - state: [16]
+
+        Returns:
+            observation: 处理后的观测数据
+                - observation.head_cam_h: [1, 3, 512, 512]
+                - observation.depth_h: [1, 3, 512, 512] (伪彩色)
+                - observation.wrist_cam_l: [1, 3, 512, 512]
+                - observation.depth_l: [1, 3, 512, 512] (伪彩色)
+                - observation.wrist_cam_r: [1, 3, 512, 512]
+                - observation.depth_r: [1, 3, 512, 512] (伪彩色)
+                - observation.state: [1, 32] (填充到32维)
+                - task: [language_instruction]
+        """
+        observation = {}
+
+        # 处理RGB图像
+        for cam_name in ['head_cam_h', 'wrist_cam_l', 'wrist_cam_r']:
+            rgb_key = f'observation.{cam_name}'
+            rgb_tensor = self.img_preprocess_smolvla(obs[cam_name])
+            observation[rgb_key] = rgb_tensor.unsqueeze(0)  # [1, 3, 512, 512]
+
+        # 处理深度图像 (转换为RGB伪彩色)
+        for depth_name in ['depth_h', 'depth_l', 'depth_r']:
+            depth_key = f'observation.{depth_name}'
+            depth_rgb = depth_to_rgb_for_smolvla(
+                obs[depth_name],
+                target_size=(512, 512),
+                depth_range=self.depth_range,
+                device=self.device
+            )
+            observation[depth_key] = depth_rgb.unsqueeze(0)  # [1, 3, 512, 512]
+
+        # 处理状态 (填充到32维)
+        state_tensor = torch.from_numpy(obs['state']).float()
+        state_padded = pad_tensor_to_target_dim(state_tensor, target_dim=32)
+        observation['observation.state'] = state_padded.unsqueeze(0)  # [1, 32]
+
+        # 添加语言指令
+        observation['task'] = [self.language_instruction]
+
+        return observation
+```
+
+### 10.5 维度适配处理
+
+#### 10.5.1 自动维度填充
+
+```python
+def pad_tensor_to_target_dim(tensor, target_dim: int):
+    """
+    将tensor从实际维度填充到目标维度
+
+    Args:
+        tensor: 输入tensor [..., actual_dim]
+        target_dim: 目标维度 (32)
+
+    Returns:
+        填充后的tensor [..., target_dim]
+    """
+    actual_dim = tensor.shape[-1]
+    if actual_dim == target_dim:
+        return tensor
+    elif actual_dim < target_dim:
+        # 填充0到目标维度
+        pad_size = target_dim - actual_dim
+        pad_shape = list(tensor.shape[:-1]) + [pad_size]
+        pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
+        return torch.cat([tensor, pad_tensor], dim=-1)
+    else:
+        # 裁剪到目标维度
+        return tensor[..., :target_dim]
+
+# 使用示例
+# Kuavo实际维度: 16维
+# SmolVLA预训练维度: 32维
+# 自动填充策略: 后16维填0
+
+state_16d = torch.randn(1, 16)  # Kuavo状态
+state_32d = pad_tensor_to_target_dim(state_16d, target_dim=32)  # [1, 32]
+
+action_32d = torch.randn(1, 50, 32)  # SmolVLA生成的动作
+action_16d = action_32d[..., :16]  # 裁剪回16维用于控制
+```
+
+#### 10.5.2 归一化处理
+
+```python
+# 对于填充部分使用恒等归一化
+# mean = 0, std = 1 (填充部分不会被改变)
+normalization_mapping:
+  STATE:
+    value: MEAN_STD  # 使用数据集统计
+  ACTION:
+    value: MEAN_STD  # 使用数据集统计
+
+# 归一化配置
+def normalize_state_action(data, stats):
+    """归一化状态和动作数据"""
+    # 状态归一化 (前16维使用统计，后16维保持0)
+    state_mean = torch.cat([stats['observation.state']['mean'], torch.zeros(16)])
+    state_std = torch.cat([stats['observation.state']['std'], torch.ones(16)])
+
+    # 动作归一化 (前16维使用统计，后16维保持0)
+    action_mean = torch.cat([stats['action']['mean'], torch.zeros(16)])
+    action_std = torch.cat([stats['action']['std'], torch.ones(16)])
+
+    return normalized_data
+```
+
+### 10.6 Flow Matching vs Diffusion
+
+#### 10.6.1 Flow Matching 原理
+
+```python
+# Flow Matching 使用连续时间流
+# 相比 Diffusion 的离散时间步，Flow Matching 更平滑
+
+class FlowMatching:
+    """Flow Matching 实现"""
+
+    def forward_flow(self, x0, x1, t):
+        """
+        前向流: x_t = (1-t) * x_0 + t * x_1
+
+        Args:
+            x0: 初始状态 (纯噪声)
+            x1: 目标状态 (真实动作)
+            t: 时间参数 [0, 1]
+        """
+        return (1 - t) * x0 + t * x1
+
+    def compute_loss(self, batch):
+        """计算 Flow Matching 损失"""
+        # 1. 准备全局条件
+        global_cond = self._prepare_global_conditioning(batch)
+
+        # 2. 提取真实动作
+        actions = batch['action']  # [B, chunk_size, 32]
+
+        # 3. 随机采样时间步
+        t = torch.rand(actions.shape[0], device=actions.device)  # [B]
+
+        # 4. 采样噪声
+        noise = torch.randn_like(actions)  # [B, chunk_size, 32]
+
+        # 5. 计算流状态
+        flow_state = self.forward_flow(noise, actions, t.unsqueeze(-1).unsqueeze(-1))
+
+        # 6. 预测速度场
+        velocity_pred = self.action_expert(flow_state, t, global_cond)
+
+        # 7. 计算损失 (预测速度 vs 真实速度)
+        true_velocity = actions - noise
+        loss = F.mse_loss(velocity_pred, true_velocity)
+
+        return loss
+
+    def sample(self, global_cond, num_steps=10):
+        """Flow Matching 采样"""
+        batch_size = global_cond.shape[0]
+
+        # 1. 从纯噪声开始
+        x = torch.randn(batch_size, self.chunk_size, self.action_dim, device=global_cond.device)
+
+        # 2. 时间步
+        timesteps = torch.linspace(0, 1, num_steps, device=global_cond.device)
+
+        # 3. 逐步去噪
+        for i in range(num_steps - 1):
+            t = timesteps[i]
+            dt = timesteps[i + 1] - timesteps[i]
+
+            # 预测速度场
+            velocity = self.action_expert(x, t.expand(batch_size), global_cond)
+
+            # 更新状态
+            x = x + velocity * dt
+
+        return x
+```
+
+#### 10.6.2 Flow Matching vs Diffusion 对比
+
+| 特性 | Flow Matching | Diffusion |
+|------|---------------|-----------|
+| **时间表示** | 连续时间 [0,1] | 离散时间步 [0,T] |
+| **前向过程** | 线性插值 | 高斯噪声添加 |
+| **训练目标** | 速度场预测 | 噪声预测 |
+| **采样步数** | 10步 | 100步 (DDPM) / 10步 (DDIM) |
+| **收敛性** | 更平滑 | 可能不稳定 |
+| **计算效率** | 更高 | 较低 |
+
+### 10.7 SMOLVLA 推理流程
+
+#### 10.7.1 在线推理
+
+```python
+# 初始化
+policy = SmolVLAPolicyWrapper.from_pretrained(checkpoint_path)
+policy.eval()
+policy.to(device)
+
+# 创建深度融合处理器
+fusion_processor = create_multi_camera_fusion(
+    target_size=(512, 512),
+    depth_range=(0, 1000),
+    device=device,
+    enable_depth=True
+)
+
+# 推理循环
+for step in range(max_steps):
+    # 1. 获取观测
+    obs = env.get_observation()
+    # obs = {
+    #   'head_cam_h': [480, 640, 3],
+    #   'depth_h': [480, 640, 1],
+    #   'wrist_cam_l': [480, 640, 3],
+    #   'depth_l': [480, 640, 1],
+    #   'wrist_cam_r': [480, 640, 3],
+    #   'depth_r': [480, 640, 1],
+    #   'state': [16]
+    # }
+
+    # 2. 深度融合处理
+    observation = fusion_processor.process_observations_simple(obs)
+    # observation = {
+    #   'observation.head_cam_h': [1, 3, 512, 512],
+    #   'observation.depth_h': [1, 3, 512, 512] (伪彩色),
+    #   'observation.wrist_cam_l': [1, 3, 512, 512],
+    #   'observation.depth_l': [1, 3, 512, 512] (伪彩色),
+    #   'observation.wrist_cam_r': [1, 3, 512, 512],
+    #   'observation.depth_r': [1, 3, 512, 512] (伪彩色),
+    #   'observation.state': [1, 32] (填充),
+    #   'task': [language_instruction]
+    # }
+
+    # 3. 选择动作
+    with torch.no_grad():
+        action = policy.select_action(observation)
+    # action: [1, 16] (裁剪回16维)
+
+    # select_action内部:
+    # - 如果action queue为空:
+    #   a. 调用Flow Matching生成chunk_size=50个动作
+    #   b. 填充action queue
+    # - 从action queue pop第一个动作
+
+    # 4. 执行动作
+    action = action.squeeze(0).cpu().numpy()  # [16]
+    obs_next, reward, done, info = env.step(action)
+
+    if done:
+        obs = env.reset()
+```
+
+#### 10.7.2 Action Queue 机制
+
+```python
+# SMOLVLA Action Queue 配置
+chunk_size: 50        # Flow Matching 生成50步动作
+n_action_steps: 8     # 每次执行8步动作
+
+# Action Queue 工作流程
+if len(self._queues[ACTION]) == 0:
+    # 生成动作chunk
+    actions = self.predict_action_chunk(observation)
+    # actions: [1, chunk_size, 32] = [1, 50, 32]
+
+    # 裁剪到16维
+    actions = actions[..., :16]  # [1, 50, 16]
+
+    # 转置并填充 (50个动作)
+    self._queues[ACTION].extend(actions.transpose(0, 1))
+    # action queue: [action[0], action[1], ..., action[49]]
+
+# 取出一个动作
+action = self._queues[ACTION].popleft()
+# action: [1, 16]
+
+# 推理频率分析
+# 每 n_action_steps = 8 步执行一次推理
+# 即每 0.8秒 推理一次 (10Hz控制频率)
+# 每次推理生成50步动作，执行前8步
+# 剩余42步在下次迭代使用
+```
+
+### 10.8 SMOLVLA 配置系统
+
+#### 10.8.1 基础配置
+
+```yaml
+# smolvla_sequential_base.yaml
+policy:
+  _target_: kuavo_train.wrapper.policy.smolvla.SmolVLAConfigWrapper
+
+  # VLM Backbone配置
+  vlm_model_name: 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'
+  load_vlm_weights: True
+
+  # 冻结策略
+  freeze_vision_encoder: True  # 冻结SigLIP视觉编码器
+  train_expert_only: True     # 只训练Action Expert
+  train_state_proj: True       # 训练state投影层
+
+  # 动作空间配置
+  max_state_dim: 32    # 预训练模型维度
+  max_action_dim: 32   # 预训练模型维度
+  chunk_size: 50       # 动作序列长度
+  n_action_steps: 8    # 每次执行步数
+
+  # 图像预处理
+  resize_imgs_with_padding: [512, 512]  # SmolVLA标准输入尺寸
+
+  # 深度相机支持
+  use_depth: True
+  depth_features:
+    - 'observation.depth_h'
+    - 'observation.depth_l'
+    - 'observation.depth_r'
+  depth_resize_with_padding: [512, 512]
+  depth_normalization_range: [0.0, 1000.0]
+
+  # Flow Matching配置
+  num_steps: 10  # 推理时的去噪步数
+```
+
+#### 10.8.2 任务配置
+
+```yaml
+# task1_moving_grasp.yaml
+task:
+  id: 1
+  name: 'moving_grasp'
+  stage: 1
+
+  language_instruction: 'Grasp the object from the moving conveyor belt using visual guidance. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table, maintaining visual alignment throughout the placement.'
+
+  data:
+    root: '/root/robot/data/task-1/1-2000/lerobot/'
+    repoid: 'lerobot/task1_moving_grasp'
+    episodes_to_use: [0, 199]
+
+  training:
+    max_epoch: 100
+    resume_from: 'pretrained'
+    pretrained_path: 'lerobot/smolvla_base'
+    policy:
+      optimizer_lr: 5e-5
+```
+
+### 10.9 SMOLVLA vs Diffusion Policy 对比
+
+| 特性 | SMOLVLA | Diffusion Policy |
+|------|---------|------------------|
+| **模型大小** | 500M (轻量级) | ~15M (自定义) |
+| **预训练** | HuggingFace预训练 | 从头训练 |
+| **多任务** | 顺序学习4个任务 | 单任务训练 |
+| **语言理解** | 支持自然语言指令 | 无语言理解 |
+| **动作生成** | Flow Matching (10步) | Diffusion (10-100步) |
+| **推理速度** | 更快 | 较慢 |
+| **训练复杂度** | 中等 (防遗忘) | 简单 |
+| **扩展性** | 易于添加新任务 | 需要重新训练 |
+| **鲁棒性** | 高 (预训练+多任务) | 中等 |
+
+---
+
 ## 附录
 
 ### A. 文件结构
