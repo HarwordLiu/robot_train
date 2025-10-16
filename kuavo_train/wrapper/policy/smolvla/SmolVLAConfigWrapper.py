@@ -37,6 +37,7 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
     # 深度图像预处理
     depth_resize_with_padding: List[int] = None
     depth_normalization_range: List[float] = None
+    use_depth_padding: bool = True  # 深度图是否使用padding方式保持长宽比
 
     def __post_init__(self):
         """
