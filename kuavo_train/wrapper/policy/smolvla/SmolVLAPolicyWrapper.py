@@ -381,6 +381,15 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                 print(f"Using random initialization")
 
         print(f"{'='*70}\n")
+
+        # 🆕 在加载权重后重新应用灵活冻结策略
+        # 因为有些层可能在权重加载后才完全初始化
+        if (config.unfreeze_vision_layers is not None or
+            config.freeze_vision_layers is not None or
+                config.freeze_vision_ratio is not None):
+            print("\n🔧 重新应用灵活视觉层冻结策略（在权重加载后）...")
+            model._apply_flexible_vision_freezing()
+
         return model
 
     def save_pretrained(self, save_directory: Path) -> None:
@@ -431,9 +440,23 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         # 获取 vision_model（SmolVLM的视觉编码器）
         try:
-            vision_model = self.model.get_vlm_model().vision_model
-        except AttributeError:
-            print("⚠️  无法找到 vision_model，跳过灵活冻结策略")
+            # 尝试多种访问路径
+            if hasattr(self, 'model') and hasattr(self.model, 'get_vlm_model'):
+                vlm_model = self.model.get_vlm_model()
+                if hasattr(vlm_model, 'vision_model'):
+                    vision_model = vlm_model.vision_model
+                else:
+                    print("⚠️  VLM model 没有 vision_model 属性，跳过灵活冻结策略")
+                    return
+            elif hasattr(self, 'vlm') and hasattr(self.vlm, 'model') and hasattr(self.vlm.model, 'vision_model'):
+                # 备用路径：直接访问 vlm
+                vision_model = self.vlm.model.vision_model
+            else:
+                print("⚠️  无法找到 vision_model，跳过灵活冻结策略")
+                print(f"   可用属性: {dir(self)[:5]}...")
+                return
+        except Exception as e:
+            print(f"⚠️  访问 vision_model 时出错: {e}")
             return
 
         # 获取视觉编码器的所有层
@@ -443,7 +466,15 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         print(f"\n{'='*70}")
         print(f"🔧 应用灵活视觉层冻结策略")
         print(f"{'='*70}")
-        print(f"Vision Encoder 总层数: {total_layers}")
+
+        # 打印调试信息
+        print(f"📊 Vision Model 信息:")
+        print(f"   - Vision Model 类型: {type(vision_model).__name__}")
+        print(f"   - 是否有 encoder: {hasattr(vision_model, 'encoder')}")
+        if hasattr(vision_model, 'config'):
+            print(f"   - Config: {type(vision_model.config).__name__}")
+
+        print(f"\nVision Encoder 总层数: {total_layers}")
 
         # 确定要冻结/解冻的层
         frozen_layers = set()
