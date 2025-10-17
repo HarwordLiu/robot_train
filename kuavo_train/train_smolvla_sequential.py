@@ -80,6 +80,36 @@ def setup_logging():
     return logging.getLogger("SmolVLASequentialTraining")
 
 
+def build_augmenter(cfg):
+    """
+    构建图像增强器（数据增广）
+
+    Args:
+        cfg: RGB_Augmenter配置
+
+    Returns:
+        ImageTransforms对象，用于数据增广
+    """
+    from kuavo_train.utils.transforms import ImageTransforms, ImageTransformsConfig, ImageTransformConfig
+
+    img_tf_cfg = ImageTransformsConfig(
+        enable=cfg.get("enable", False),
+        max_num_transforms=cfg.get("max_num_transforms", 1),
+        random_order=cfg.get("random_order", False),
+        tfs={}
+    )
+
+    if "tfs" in cfg:
+        for name, tf_dict in cfg["tfs"].items():
+            img_tf_cfg.tfs[name] = ImageTransformConfig(
+                weight=tf_dict.get("weight", 1.0),
+                type=tf_dict.get("type", "Identity"),
+                kwargs=tf_dict.get("kwargs", {}),
+            )
+
+    return ImageTransforms(img_tf_cfg)
+
+
 def load_task_config(cfg_root: Path, task_id: int) -> DictConfig:
     """
     加载指定任务的配置
@@ -113,11 +143,12 @@ class ReplayDatasetManager:
     在训练任务N时，混合之前任务1到N-1的数据，防止灾难性遗忘
     """
 
-    def __init__(self, cfg: DictConfig, current_task_id: int, cfg_root: Path, dataset_fps: int):
+    def __init__(self, cfg: DictConfig, current_task_id: int, cfg_root: Path, dataset_fps: int, image_transforms=None):
         self.cfg = cfg
         self.current_task_id = current_task_id
         self.cfg_root = cfg_root
         self.dataset_fps = dataset_fps
+        self.image_transforms = image_transforms  # 添加image_transforms支持
         self.replay_datasets = {}  # task_id -> dataset
         self.replay_weights = {}   # task_id -> weight
 
@@ -159,7 +190,7 @@ class ReplayDatasetManager:
                     # 加载任务配置
                     task_cfg = load_task_config(self.cfg_root, task_id)
 
-                    # 加载数据集（使用delta_timestamps）
+                    # 加载数据集（使用delta_timestamps和image_transforms）
                     dataset = LeRobotDataset(
                         task_cfg.task.data.repoid,
                         root=task_cfg.task.data.root,
@@ -167,7 +198,8 @@ class ReplayDatasetManager:
                             task_cfg.task.data.episodes_to_use[0],
                             task_cfg.task.data.episodes_to_use[1] + 1
                         )),
-                        delta_timestamps=delta_timestamps
+                        delta_timestamps=delta_timestamps,
+                        image_transforms=self.image_transforms  # 应用数据增广
                     )
 
                     self.replay_datasets[task_id] = dataset
@@ -425,7 +457,8 @@ def create_mixed_dataloader(
     cfg: DictConfig,
     task_cfg: DictConfig,
     replay_manager: Optional[ReplayDatasetManager] = None,
-    dataset_fps: int = 10
+    dataset_fps: int = 10,
+    image_transforms=None
 ) -> DataLoader:
     """
     创建混合了replay数据的DataLoader
@@ -435,6 +468,7 @@ def create_mixed_dataloader(
         task_cfg: 当前任务配置
         replay_manager: Replay数据管理器
         dataset_fps: 数据集的fps（从metadata读取）
+        image_transforms: 图像增广transforms（可选）
 
     Returns:
         混合数据的DataLoader
@@ -456,7 +490,7 @@ def create_mixed_dataloader(
     print(
         f"   - action: {chunk_size} future frames ({chunk_size/dataset_fps:.2f}s @ {dataset_fps}fps)")
 
-    # 当前任务数据集（使用delta_timestamps）
+    # 当前任务数据集（使用delta_timestamps和image_transforms）
     current_dataset = LeRobotDataset(
         task_cfg.task.data.repoid,
         root=task_cfg.task.data.root,
@@ -464,7 +498,8 @@ def create_mixed_dataloader(
             task_cfg.task.data.episodes_to_use[0],
             task_cfg.task.data.episodes_to_use[1] + 1
         )),
-        delta_timestamps=delta_timestamps
+        delta_timestamps=delta_timestamps,
+        image_transforms=image_transforms
     )
 
     print(f"📊 Current Task {task_id} Dataset: {len(current_dataset)} frames")
@@ -874,17 +909,30 @@ def main(cfg: DictConfig):
     policy.train()
 
     # ==================== 准备数据 ====================
+    # 构建图像增广器
+    print("🎨 Building Image Augmenter...")
+    image_transforms = None
+    if hasattr(cfg.training, 'RGB_Augmenter') and cfg.training.RGB_Augmenter.get('enable', False):
+        image_transforms = build_augmenter(cfg.training.RGB_Augmenter)
+        print(
+            f"✅ Image augmentation enabled with {len(cfg.training.RGB_Augmenter.tfs)} transforms")
+        print(
+            f"   - Max transforms per image: {cfg.training.RGB_Augmenter.max_num_transforms}")
+        print(f"   - Random order: {cfg.training.RGB_Augmenter.random_order}")
+    else:
+        print("⚠️  Image augmentation disabled (training without data augmentation)")
+
     # 加载replay buffer（如果需要）
     replay_manager = None
     if task_id > 1 and cfg.sequential.use_replay_buffer:
         cfg_root = Path(__file__).parent.parent / "configs/policy"
         replay_manager = ReplayDatasetManager(
-            cfg, task_id, cfg_root, dataset_fps)
+            cfg, task_id, cfg_root, dataset_fps, image_transforms=image_transforms)
         replay_manager.load_replay_tasks()
 
-    # 创建dataloader（传递dataset_fps）
+    # 创建dataloader（传递dataset_fps和image_transforms）
     dataloader = create_mixed_dataloader(
-        cfg, task_cfg, replay_manager, dataset_fps)
+        cfg, task_cfg, replay_manager, dataset_fps, image_transforms=image_transforms)
 
     # ==================== 构建优化器（分层学习率）====================
     # 检查是否启用分层学习率
