@@ -38,7 +38,7 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
     depth_resize_with_padding: List[int] = None
     depth_normalization_range: List[float] = None
     use_depth_padding: bool = True  # 深度图是否使用padding方式保持长宽比
-    
+
     # 分层学习率支持（解锁VLM时使用）
     use_layerwise_lr: bool = False  # 是否启用分层学习率
     vision_encoder_lr: float = None  # 视觉编码器学习率（如果为None，使用optimizer_lr）
@@ -65,7 +65,7 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
 
         if self.depth_normalization_range is None:
             self.depth_normalization_range = [0.0, 1000.0]
-        
+
         # 分层学习率默认值
         if self.vision_encoder_lr is None:
             self.vision_encoder_lr = getattr(self, 'optimizer_lr', 5e-5)
