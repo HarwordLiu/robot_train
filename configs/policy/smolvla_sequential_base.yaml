@@ -31,8 +31,8 @@ policy:
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
-  freeze_vision_encoder: True # 冻结SigLIP视觉编码器
-  train_expert_only: True # 只训练Action Expert
+  freeze_vision_encoder: False # 解锁视觉编码器参与训练
+  train_expert_only: False # 训练整个模型（VLM + Action Expert）
   train_state_proj: True # 训练state投影层
 
   # 观测配置
@@ -79,12 +79,17 @@ policy:
   # 针对batch_size=64优化的参数
   optimizer_betas: [0.9, 0.999] # beta2=0.999对较大batch更稳定
   optimizer_eps: 1.0e-08
-  optimizer_weight_decay: 5.0e-7 # 适度降低正则化，避免欠拟合
-  optimizer_grad_clip_norm: 1.0 # VLM embedding空间大，需要严格梯度控制
+  optimizer_weight_decay: 1.0e-6 # 增加正则化，防止过拟合
+  optimizer_grad_clip_norm: 0.5 # 降低梯度裁剪阈值，保护预训练权重
+
+  # 分层学习率配置（解锁VLM后使用）
+  use_layerwise_lr: True # 启用分层学习率
+  vision_encoder_lr: 5.0e-6 # 视觉编码器学习率（非常低，保护预训练权重）
+  expert_lr: 2.0e-5 # Action Expert学习率（相对较高）
 
   # 学习率调度器配置（各任务会override）
-  scheduler_warmup_steps: 1500 # VLM+Action Expert异构架构需要更长warmup
-  scheduler_decay_steps: 25000 # 充分的cosine decay保证收敛
+  scheduler_warmup_steps: 3000 # 解锁VLM后需要更长warmup
+  scheduler_decay_steps: 35000 # 更长的衰减周期
   scheduler_decay_lr: 1e-6 # 最终学习率衰减到很小
 
 # ==================== 训练基础配置 ====================

@@ -18,19 +18,24 @@ task:
     root: '/root/robot/data/task-1/1-2000/lerobot/'
     # root: '/mnt/e/robot/data/data/task1/lerobot/1-400/'
     repoid: 'lerobot/task1_moving_grasp'
-    episodes_to_use: [0, 999]
+    episodes_to_use: [0, 199]
 
   # 训练配置
   training:
-    max_epoch: 100 # 任务1训练100个epochs
+    max_epoch: 150 # 解锁VLM后需要更多训练时间
 
     # Stage 1: 从HuggingFace预训练SmolVLA开始
     resume_from: 'pretrained'
     pretrained_path: 'lerobot/smolvla_base' # 使用镜像源下载的预训练模型
 
-    # 优化器配置（针对batch_size=64优化）
+    # 优化器配置（分层学习率）
     policy:
-      optimizer_lr: 5e-5 # 保守的VLM微调学习率，保证最佳稳定性和效果
-      scheduler_warmup_steps: 1500 # 充分warmup VLM+Action Expert异构架构
-      scheduler_decay_steps: 25000 # Cosine decay到充分收敛
+      # 基础学习率（用于其他模块）
+      optimizer_lr: 1e-5 # 降低基础学习率，避免快速拟合轨迹
+      # 分层学习率
+      vision_encoder_lr: 5e-6 # 视觉编码器低学习率
+      expert_lr: 2e-5 # Action Expert高学习率
+      # 调度器
+      scheduler_warmup_steps: 3000 # 更长warmup
+      scheduler_decay_steps: 35000 # 更长衰减周期
 # 任务1没有replay配置（因为是第一个任务）

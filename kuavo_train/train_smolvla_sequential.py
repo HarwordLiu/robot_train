@@ -833,6 +833,11 @@ def main(cfg: DictConfig):
         policy_cfg.optimizer_lr = task_cfg.task.training.policy.optimizer_lr
         policy_cfg.scheduler_warmup_steps = task_cfg.task.training.policy.scheduler_warmup_steps
         policy_cfg.scheduler_decay_steps = task_cfg.task.training.policy.scheduler_decay_steps
+        # 分层学习率
+        if hasattr(task_cfg.task.training.policy, 'vision_encoder_lr'):
+            policy_cfg.vision_encoder_lr = task_cfg.task.training.policy.vision_encoder_lr
+        if hasattr(task_cfg.task.training.policy, 'expert_lr'):
+            policy_cfg.expert_lr = task_cfg.task.training.policy.expert_lr
 
     # ==================== 加载/创建模型 ====================
     if task_cfg.task.training.resume_from == 'pretrained':
@@ -881,20 +886,81 @@ def main(cfg: DictConfig):
     dataloader = create_mixed_dataloader(
         cfg, task_cfg, replay_manager, dataset_fps)
 
-    # ==================== 构建优化器 ====================
-    optimizer = policy.config.get_optimizer_preset().build(policy.parameters())
+    # ==================== 构建优化器（分层学习率）====================
+    # 检查是否启用分层学习率
+    use_layerwise_lr = getattr(policy_cfg, 'use_layerwise_lr', False)
+
+    if use_layerwise_lr and not policy_cfg.freeze_vision_encoder:
+        print("\n🎯 Using Layerwise Learning Rates")
+
+        # 获取学习率
+        vision_lr = getattr(policy_cfg, 'vision_encoder_lr',
+                            policy_cfg.optimizer_lr)
+        expert_lr = getattr(policy_cfg, 'expert_lr', policy_cfg.optimizer_lr)
+        base_lr = policy_cfg.optimizer_lr
+
+        # 分组参数
+        vision_params = []
+        expert_params = []
+        other_params = []
+
+        for name, param in policy.named_parameters():
+            if not param.requires_grad:
+                continue
+
+            if 'vision' in name.lower() or 'visual' in name.lower() or 'image' in name.lower():
+                vision_params.append(param)
+            elif 'action_expert' in name or 'expert' in name.lower():
+                expert_params.append(param)
+            else:
+                other_params.append(param)
+
+        # 构建参数组
+        param_groups = []
+        if vision_params:
+            param_groups.append(
+                {'params': vision_params, 'lr': vision_lr, 'name': 'vision_encoder'})
+        if expert_params:
+            param_groups.append(
+                {'params': expert_params, 'lr': expert_lr, 'name': 'action_expert'})
+        if other_params:
+            param_groups.append(
+                {'params': other_params, 'lr': base_lr, 'name': 'others'})
+
+        # 创建优化器
+        optimizer = torch.optim.AdamW(
+            param_groups,
+            betas=policy_cfg.optimizer_betas,
+            eps=policy_cfg.optimizer_eps,
+            weight_decay=policy_cfg.optimizer_weight_decay
+        )
+
+        print(
+            f"   Vision Encoder LR: {vision_lr:.2e} ({len(vision_params)} params)")
+        print(
+            f"   Action Expert LR: {expert_lr:.2e} ({len(expert_params)} params)")
+        print(
+            f"   Other Modules LR: {base_lr:.2e} ({len(other_params)} params)")
+    else:
+        # 使用统一学习率
+        print("\n🎯 Using Unified Learning Rate")
+        optimizer = policy.config.get_optimizer_preset().build(policy.parameters())
+        print(f"   Learning Rate: {policy_cfg.optimizer_lr:.2e}")
+
+    # 构建学习率调度器
     lr_scheduler = policy.config.get_scheduler_preset().build(
         optimizer,
         num_training_steps=task_cfg.task.training.max_epoch * len(dataloader)
     )
 
-    print(f"\n🎯 Training Configuration:")
+    print(f"\n📊 Training Configuration:")
     print(f"   Epochs: {task_cfg.task.training.max_epoch}")
     print(f"   Batch Size: {cfg.training.batch_size}")
-    print(f"   Learning Rate: {policy_cfg.optimizer_lr}")
     print(f"   Steps per Epoch: {len(dataloader)}")
     print(
         f"   Total Steps: {task_cfg.task.training.max_epoch * len(dataloader)}")
+    print(f"   Freeze Vision Encoder: {policy_cfg.freeze_vision_encoder}")
+    print(f"   Train Expert Only: {policy_cfg.train_expert_only}")
 
     # ==================== 数据格式验证 ====================
     print("\n" + "="*70)
