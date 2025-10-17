@@ -50,17 +50,17 @@ check_python() {
 install_deps() {
     echo -e "${BLUE}📦 安装训练监控依赖...${NC}"
     echo ""
-    
+
     echo -e "${YELLOW}安装必需依赖...${NC}"
     pip3 install tensorboard || {
         echo -e "${RED}❌ 安装失败: tensorboard${NC}"
         exit 1
     }
-    
+
     echo ""
     echo -e "${YELLOW}安装可选依赖（用于高级功能）...${NC}"
     pip3 install rich matplotlib psutil GPUtil
-    
+
     echo ""
     echo -e "${GREEN}✅ 依赖安装完成！${NC}"
     echo ""
@@ -109,14 +109,14 @@ generate_report() {
 # 主函数
 main() {
     check_python
-    
+
     # 如果没有参数，显示帮助
     if [ $# -eq 0 ]; then
         # 默认启动基础监控
         monitor_basic
         exit 0
     fi
-    
+
     # 解析命令
     case "$1" in
         basic)

@@ -5,10 +5,10 @@
 basic:
   # 自动刷新间隔（秒）
   refresh_interval: 5
-  
+
   # 是否在启动时自动寻找最新训练
   auto_find_latest: true
-  
+
   # 日志输出级别: DEBUG, INFO, WARNING, ERROR
   log_level: INFO
 
@@ -19,35 +19,35 @@ metrics:
     # Loss变化率阈值（百分比）
     # 如果loss上升超过此值，触发警告
     increase_threshold: 10.0
-    
+
     # Loss震荡系数阈值
     # std / mean > threshold 则认为震荡过大
     oscillation_threshold: 0.5
-    
+
     # 用于判断收敛的窗口大小（epoch数）
     convergence_window: 10
-    
+
     # 收敛判断阈值（std）
     convergence_threshold: 0.01
-  
+
   # 学习率相关
   learning_rate:
     # 学习率下限（低于此值警告）
     min_lr: 1.0e-7
-    
+
     # 学习率上限（高于此值警告）
     max_lr: 1.0e-2
-    
+
     # 推荐学习率范围
     recommended_min: 1.0e-5
     recommended_max: 1.0e-3
-  
+
   # 训练时间相关
   timing:
     # Epoch耗时上限（分钟）
     # 超过此值提示可能有性能问题
     max_epoch_duration: 30.0
-    
+
     # 预计总训练时间上限（小时）
     # 超过此值建议优化训练策略
     max_total_duration: 48.0
@@ -56,36 +56,36 @@ metrics:
 health:
   # 各项权重（总和应为100）
   weights:
-    loss_trend: 40      # Loss趋势
-    lr_status: 20       # 学习率状态
-    training_speed: 15  # 训练速度
-    resource_usage: 15  # 资源使用
-    validation: 10      # 验证表现
-  
+    loss_trend: 40 # Loss趋势
+    lr_status: 20 # 学习率状态
+    training_speed: 15 # 训练速度
+    resource_usage: 15 # 资源使用
+    validation: 10 # 验证表现
+
   # 评分等级
   grades:
-    excellent: 90  # 优秀
-    good: 70       # 良好
-    fair: 50       # 一般
+    excellent: 90 # 优秀
+    good: 70 # 良好
+    fair: 50 # 一般
     # < 50: 差
 
 # ==================== GPU监控配置 ====================
 gpu:
   # 是否默认启用GPU监控
   enabled: false
-  
+
   # GPU利用率阈值
   utilization:
-    low_threshold: 30.0   # 低于此值警告利用率过低
-    high_threshold: 95.0  # 高于此值警告可能过载
-    optimal_min: 70.0     # 最优利用率范围
+    low_threshold: 30.0 # 低于此值警告利用率过低
+    high_threshold: 95.0 # 高于此值警告可能过载
+    optimal_min: 70.0 # 最优利用率范围
     optimal_max: 90.0
-  
+
   # 显存使用阈值（百分比）
   memory:
-    warning_threshold: 90.0  # 显存使用超过此值警告
-    critical_threshold: 95.0  # 超过此值严重警告
-  
+    warning_threshold: 90.0 # 显存使用超过此值警告
+    critical_threshold: 95.0 # 超过此值严重警告
+
   # 温度阈值（摄氏度）
   temperature:
     warning_threshold: 80.0
@@ -96,7 +96,7 @@ system:
   # CPU使用率阈值
   cpu:
     warning_threshold: 90.0
-  
+
   # 内存使用率阈值
   memory:
     warning_threshold: 90.0
@@ -107,12 +107,12 @@ validation:
   overfitting:
     # val_loss / train_loss > threshold 则认为过拟合
     ratio_threshold: 1.5
-  
+
   # 多任务验证
   multi_task:
     # 是否监控所有任务的验证loss
     enabled: true
-    
+
     # 任务loss差异阈值
     # 如果某个任务的loss明显高于其他任务，触发警告
     disparity_threshold: 2.0
@@ -123,19 +123,19 @@ visualization:
   plot:
     # 图表大小（英寸）
     figsize: [14, 10]
-    
+
     # DPI
     dpi: 100
-    
+
     # 样式: default, seaborn, ggplot, bmh等
     style: default
-    
+
     # 是否显示网格
     grid: true
-    
+
     # 网格透明度
     grid_alpha: 0.3
-  
+
   # 历史数据点数限制（避免图表过于拥挤）
   history_limit: 100
 
@@ -143,65 +143,65 @@ visualization:
 alerts:
   # 是否启用告警
   enabled: true
-  
+
   # 告警级别
   levels:
-    - INFO     # 信息
-    - WARNING  # 警告
-    - ERROR    # 错误
+    - INFO # 信息
+    - WARNING # 警告
+    - ERROR # 错误
     - CRITICAL # 严重
-  
+
   # 告警规则
   rules:
-    - name: "Loss异常上升"
-      condition: "loss_increase > 20%"
+    - name: 'Loss异常上升'
+      condition: 'loss_increase > 20%'
       level: WARNING
-      message: "Loss在最近几个epoch中上升超过20%，请检查学习率和数据"
-    
-    - name: "Loss包含NaN"
-      condition: "loss is NaN or Inf"
+      message: 'Loss在最近几个epoch中上升超过20%，请检查学习率和数据'
+
+    - name: 'Loss包含NaN'
+      condition: 'loss is NaN or Inf'
       level: CRITICAL
-      message: "Loss出现NaN或Inf，训练已崩溃！"
-    
-    - name: "GPU利用率过低"
-      condition: "gpu_utilization < 30%"
+      message: 'Loss出现NaN或Inf，训练已崩溃！'
+
+    - name: 'GPU利用率过低'
+      condition: 'gpu_utilization < 30%'
       level: INFO
-      message: "GPU利用率较低，考虑增加batch size或检查数据加载"
-    
-    - name: "显存即将耗尽"
-      condition: "gpu_memory > 95%"
+      message: 'GPU利用率较低，考虑增加batch size或检查数据加载'
+
+    - name: '显存即将耗尽'
+      condition: 'gpu_memory > 95%'
       level: ERROR
-      message: "显存使用超过95%，可能即将OOM"
-    
-    - name: "训练时间过长"
-      condition: "estimated_time > 48h"
+      message: '显存使用超过95%，可能即将OOM'
+
+    - name: '训练时间过长'
+      condition: 'estimated_time > 48h'
       level: WARNING
-      message: "预计训练时间超过48小时，建议优化训练策略"
+      message: '预计训练时间超过48小时，建议优化训练策略'
 
 # ==================== 报告配置 ====================
 report:
   # 自动生成报告
   auto_generate: false
-  
+
   # 报告生成间隔（小时）
   interval: 1.0
-  
+
   # 报告输出目录（相对于run_dir）
-  output_dir: "reports"
-  
+  output_dir: 'reports'
+
   # 报告格式
   formats:
-    - txt   # 文本报告
-    - json  # JSON格式（便于程序解析）
-  
+    - txt # 文本报告
+    - json # JSON格式（便于程序解析）
+
   # 报告包含的内容
   include:
-    - summary        # 训练摘要
-    - metrics        # 关键指标
-    - checkpoints    # Checkpoint状态
-    - health_score   # 健康度评分
-    - warnings       # 警告列表
-    - suggestions    # 优化建议
+    - summary # 训练摘要
+    - metrics # 关键指标
+    - checkpoints # Checkpoint状态
+    - health_score # 健康度评分
+    - warnings # 警告列表
+    - suggestions # 优化建议
 
 # ==================== 高级功能 ====================
 advanced:
@@ -210,17 +210,17 @@ advanced:
     enabled: false
     # 要对比的运行目录列表
     runs: []
-  
+
   # 实时通知（实验性功能）
   notification:
     enabled: false
     # 通知方式: email, slack, webhook
     method: webhook
     # Webhook URL
-    webhook_url: ""
+    webhook_url: ''
     # 触发通知的告警级别
     alert_levels: [ERROR, CRITICAL]
-  
+
   # 性能分析
   profiling:
     enabled: false
@@ -235,4 +235,3 @@ custom_metrics:
   #   tag: "train/vision_encoder_grad_norm"
   #   threshold: 10.0
   #   description: "视觉编码器梯度范数"
-
