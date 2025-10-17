@@ -46,6 +46,9 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         # 调用父类SmolVLAPolicy的初始化
         super().__init__(config, dataset_stats)
 
+        # 🆕 应用灵活的视觉层冻结策略
+        self._apply_flexible_vision_freezing()
+
         # Kuavo项目特定日志
         print("\n" + "="*70)
         print("🤖 SmolVLA Policy Initialized for Kuavo Project")
@@ -144,20 +147,20 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         # 调用父类select_action
         return super().select_action(batch, noise)
-    
+
     def _get_action_chunk(self, batch: dict[str, torch.Tensor], noise: torch.Tensor | None = None) -> torch.Tensor:
         """
         重写父类方法以修复维度不匹配问题
-        
+
         正确的顺序：
         1. 模型预测（输出32D归一化的动作）
         2. 用32D参数反归一化
         3. 裁剪到16D（Kuavo实际维度）
-        
+
         父类的实现顺序错误（先裁剪再反归一化），导致维度不匹配。
         """
         from lerobot.constants import ACTION
-        
+
         # Copy queues so that we don't modify the originals
         for k in batch:
             if k in self._queues and k != ACTION:
@@ -169,72 +172,73 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         lang_tokens, lang_masks = self.prepare_language(batch)
 
         # 模型采样（输出32D归一化的动作）
-        actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
-        
+        actions = self.model.sample_actions(
+            images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+
         # 先在32D空间反归一化（使用32D的mean/std）
         actions = self.unnormalize_outputs({ACTION: actions})[ACTION]
-        
+
         # 然后裁剪到原始维度（16D）
         original_action_dim = self.config.action_feature.shape[0]
         actions = actions[:, :, :original_action_dim]
-        
+
         if self.config.adapt_to_pi_aloha:
             actions = self._pi_aloha_encode_actions(actions)
-        
+
         return actions
 
     @staticmethod
     def _create_identity_stats(config: SmolVLAConfig) -> Dict[str, Dict[str, torch.Tensor]]:
         """
         创建"空"的dataset_stats，使归一化成为恒等变换
-        
+
         对于每个feature：
         - mean = 0（减去0不改变数据）
         - std = 1（除以1不改变数据）
-        
+
         注意：对于 state 和 action，使用 max_state_dim 和 max_action_dim（32维）
         而不是实际的维度（16维），以匹配训练时的填充维度。
-        
+
         对于深度特征的shape不匹配问题，会在加载checkpoint时通过broadcasting自动解决。
-        
+
         Args:
             config: SmolVLA配置对象
-            
+
         Returns:
             包含所有features的identity stats字典
         """
         stats = {}
-        
+
         # 处理input features（observations）
         for key, feature in config.input_features.items():
             shape = feature.shape
-            
+
             # 对于state，使用max_state_dim而不是实际维度
             if 'state' in key.lower():
                 shape = (config.max_state_dim,)
-            
+
             stats[key] = {
                 'mean': torch.zeros(shape, dtype=torch.float32),
                 'std': torch.ones(shape, dtype=torch.float32),
                 'min': torch.zeros(shape, dtype=torch.float32),
                 'max': torch.ones(shape, dtype=torch.float32),
             }
-        
+
         # 处理output features（actions）
         for key, feature in config.output_features.items():
             shape = feature.shape
-            
+
             # 对于action，使用max_action_dim而不是实际维度
             if 'action' in key.lower():
                 shape = (config.max_action_dim,)
-            
+
             stats[key] = {
                 'mean': torch.zeros(shape, dtype=torch.float32),
                 'std': torch.ones(shape, dtype=torch.float32),
                 'min': torch.zeros(shape, dtype=torch.float32),
                 'max': torch.ones(shape, dtype=torch.float32),
             }
-        
+
         return stats
 
     @classmethod
@@ -271,7 +275,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         # 如果没有提供dataset_stats，创建临时的identity stats用于初始化
         # 真实的归一化参数会从checkpoint中加载
         if dataset_stats is None:
-            print("⚠️  No dataset_stats provided. Will load normalization params from checkpoint.")
+            print(
+                "⚠️  No dataset_stats provided. Will load normalization params from checkpoint.")
             dataset_stats = cls._create_identity_stats(config)
 
         # 创建模型实例
@@ -286,62 +291,72 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                 # 加载完整的 state_dict（包括归一化参数）
                 from safetensors.torch import load_file
                 full_state_dict = load_file(str(model_file))
-                
+
                 # 分离归一化参数和模型参数
-                norm_keys = ("normalize_inputs", "normalize_targets", "unnormalize_outputs")
-                norm_state_dict = {k: v for k, v in full_state_dict.items() if k.startswith(norm_keys)}
-                model_state_dict = {k: v for k, v in full_state_dict.items() if not k.startswith(norm_keys)}
-                
+                norm_keys = ("normalize_inputs",
+                             "normalize_targets", "unnormalize_outputs")
+                norm_state_dict = {
+                    k: v for k, v in full_state_dict.items() if k.startswith(norm_keys)}
+                model_state_dict = {
+                    k: v for k, v in full_state_dict.items() if not k.startswith(norm_keys)}
+
                 # 先加载模型参数（不包括归一化）
-                missing, unexpected = model.load_state_dict(model_state_dict, strict=False)
+                missing, unexpected = model.load_state_dict(
+                    model_state_dict, strict=False)
                 print(f"✅ Loaded model weights from local checkpoint")
-                
+
                 # 再加载归一化参数（如果存在）
                 if norm_state_dict:
                     # 修复深度特征归一化参数的shape不匹配问题
                     # checkpoint中深度特征的归一化参数是(1,1,1)，但模型初始化时创建的是(1,480,640)
                     # 我们需要保持(1,1,1)以便在forward时自动broadcast到任意分辨率
-                    
+
                     import torch.nn as nn
-                    
+
                     # 直接访问并替换归一化模块中的参数
                     for key, value in norm_state_dict.items():
                         # 通过名称访问嵌套的参数
                         # 例如: normalize_inputs.buffer_observation_depth_h.mean
                         parts = key.split('.')
                         obj = model
-                        
+
                         # 导航到目标对象（例如ParameterDict）
                         for part in parts[:-1]:
                             obj = getattr(obj, part)
-                        
+
                         # 获取最后一个属性名（例如'mean'）
                         param_name = parts[-1]
-                        
+
                         # 如果是ParameterDict，直接替换其中的Parameter
                         if isinstance(obj, nn.ParameterDict):
                             current_param = obj[param_name]
                             checkpoint_shape = value.shape
                             current_shape = current_param.shape
-                            
+
                             if checkpoint_shape != current_shape:
-                                print(f"🔧 Keeping compact shape for {key}: {checkpoint_shape} (model had {current_shape})")
-                            
+                                print(
+                                    f"🔧 Keeping compact shape for {key}: {checkpoint_shape} (model had {current_shape})")
+
                             # 创建新的Parameter对象，保持checkpoint的shape
-                            obj[param_name] = nn.Parameter(value, requires_grad=False)
+                            obj[param_name] = nn.Parameter(
+                                value, requires_grad=False)
                         else:
                             # 其他情况，尝试直接赋值
                             if hasattr(obj, param_name):
                                 current_param = getattr(obj, param_name)
                                 if hasattr(current_param, 'data'):
                                     current_param.data = value
-                    
+
                     print(f"✅ Loaded normalization parameters from checkpoint")
-                    print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_inputs' in k])} input norm params")
-                    print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_targets' in k])} target norm params")
-                    print(f"   - {len([k for k in norm_state_dict.keys() if 'unnormalize_outputs' in k])} unnorm params")
+                    print(
+                        f"   - {len([k for k in norm_state_dict.keys() if 'normalize_inputs' in k])} input norm params")
+                    print(
+                        f"   - {len([k for k in norm_state_dict.keys() if 'normalize_targets' in k])} target norm params")
+                    print(
+                        f"   - {len([k for k in norm_state_dict.keys() if 'unnormalize_outputs' in k])} unnorm params")
                 else:
-                    print(f"⚠️  No normalization parameters found in checkpoint. Using identity normalization.")
+                    print(
+                        f"⚠️  No normalization parameters found in checkpoint. Using identity normalization.")
             else:
                 print(f"⚠️  Model file not found: {model_file}")
         else:
@@ -394,3 +409,128 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         print(f"✅ Model saved successfully")
         print(f"   Config: {save_directory / 'config.json'}")
         print(f"   Weights: {model_file}")
+
+    def _apply_flexible_vision_freezing(self):
+        """
+        应用灵活的视觉层冻结策略
+
+        支持三种配置方式（优先级从高到低）：
+        1. unfreeze_vision_layers: 指定要解冻的层索引（支持负数索引）
+        2. freeze_vision_layers: 指定要冻结的层索引
+        3. freeze_vision_ratio: 按比例冻结前N%的层
+
+        如果没有配置以上任何选项，使用默认的 freeze_vision_encoder 行为。
+        """
+        config = self.config
+
+        # 如果没有配置灵活冻结策略，使用默认行为
+        if (config.unfreeze_vision_layers is None and
+            config.freeze_vision_layers is None and
+                config.freeze_vision_ratio is None):
+            return
+
+        # 获取 vision_model（SmolVLM的视觉编码器）
+        try:
+            vision_model = self.model.get_vlm_model().vision_model
+        except AttributeError:
+            print("⚠️  无法找到 vision_model，跳过灵活冻结策略")
+            return
+
+        # 获取视觉编码器的所有层
+        vision_layers = vision_model.encoder.layers
+        total_layers = len(vision_layers)
+
+        print(f"\n{'='*70}")
+        print(f"🔧 应用灵活视觉层冻结策略")
+        print(f"{'='*70}")
+        print(f"Vision Encoder 总层数: {total_layers}")
+
+        # 确定要冻结/解冻的层
+        frozen_layers = set()
+        unfrozen_layers = set()
+
+        # 优先级1: unfreeze_vision_layers
+        if config.unfreeze_vision_layers is not None:
+            print(f"\n策略: 解冻指定层 {config.unfreeze_vision_layers}")
+
+            # 默认所有层都冻结
+            frozen_layers = set(range(total_layers))
+
+            # 解冻指定的层（支持负数索引）
+            for idx in config.unfreeze_vision_layers:
+                if idx < 0:
+                    actual_idx = total_layers + idx
+                else:
+                    actual_idx = idx
+
+                if 0 <= actual_idx < total_layers:
+                    frozen_layers.discard(actual_idx)
+                    unfrozen_layers.add(actual_idx)
+                else:
+                    print(
+                        f"⚠️  警告: 层索引 {idx} (实际: {actual_idx}) 超出范围 [0, {total_layers-1}]")
+
+        # 优先级2: freeze_vision_layers
+        elif config.freeze_vision_layers is not None:
+            print(f"\n策略: 冻结指定层 {config.freeze_vision_layers}")
+
+            # 默认所有层都解冻
+            unfrozen_layers = set(range(total_layers))
+
+            # 冻结指定的层
+            for idx in config.freeze_vision_layers:
+                if 0 <= idx < total_layers:
+                    frozen_layers.add(idx)
+                    unfrozen_layers.discard(idx)
+                else:
+                    print(f"⚠️  警告: 层索引 {idx} 超出范围 [0, {total_layers-1}]")
+
+        # 优先级3: freeze_vision_ratio
+        elif config.freeze_vision_ratio is not None:
+            ratio = config.freeze_vision_ratio
+            if not 0.0 <= ratio <= 1.0:
+                print(
+                    f"⚠️  警告: freeze_vision_ratio={ratio} 不在 [0.0, 1.0] 范围内，使用默认行为")
+                return
+
+            num_frozen = int(total_layers * ratio)
+            print(f"\n策略: 按比例冻结前 {ratio:.1%} 的层 (前 {num_frozen} 层)")
+
+            frozen_layers = set(range(num_frozen))
+            unfrozen_layers = set(range(num_frozen, total_layers))
+
+        # 应用冻结策略
+        for layer_idx in range(total_layers):
+            layer = vision_layers[layer_idx]
+
+            if layer_idx in frozen_layers:
+                # 冻结层
+                layer.eval()
+                for param in layer.parameters():
+                    param.requires_grad = False
+            else:
+                # 解冻层
+                for param in layer.parameters():
+                    param.requires_grad = True
+
+        # 打印结果摘要
+        print(f"\n✅ 冻结策略应用完成:")
+        print(f"   🔒 冻结层数: {len(frozen_layers)} / {total_layers}")
+        print(f"   🔓 解冻层数: {len(unfrozen_layers)} / {total_layers}")
+
+        if frozen_layers:
+            frozen_list = sorted(list(frozen_layers))
+            if len(frozen_list) <= 10:
+                print(f"   🔒 冻结层索引: {frozen_list}")
+            else:
+                print(f"   🔒 冻结层索引: [{frozen_list[0]}...{frozen_list[-1]}]")
+
+        if unfrozen_layers:
+            unfrozen_list = sorted(list(unfrozen_layers))
+            if len(unfrozen_list) <= 10:
+                print(f"   🔓 解冻层索引: {unfrozen_list}")
+            else:
+                print(
+                    f"   🔓 解冻层索引: [{unfrozen_list[0]}...{unfrozen_list[-1]}]")
+
+        print(f"{'='*70}\n")

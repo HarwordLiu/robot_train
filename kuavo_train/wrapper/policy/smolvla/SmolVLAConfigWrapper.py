@@ -44,6 +44,14 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
     vision_encoder_lr: float = None  # 视觉编码器学习率（如果为None，使用optimizer_lr）
     expert_lr: float = None  # Action Expert学习率（如果为None，使用optimizer_lr）
 
+    # 🆕 灵活的视觉层冻结配置
+    # 方式1: 指定要解冻的层索引列表（推荐）
+    unfreeze_vision_layers: List[int] = None  # 例如: [-1, -2, -3] 解冻最后3层
+    # 方式2: 指定要冻结的层索引列表
+    freeze_vision_layers: List[int] = None  # 例如: [0, 1, 2, 3, 4] 冻结前5层
+    # 方式3: 使用比例（0.0-1.0）
+    freeze_vision_ratio: float = None  # 例如: 0.75 表示冻结前75%的层
+
     def __post_init__(self):
         """
         后初始化处理
@@ -113,6 +121,18 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         print(f"   - Action Steps: {self.n_action_steps}")
         print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
         print(f"   - Train Expert Only: {self.train_expert_only}")
+
+        # 🆕 打印灵活冻结策略配置
+        if self.unfreeze_vision_layers is not None:
+            print(
+                f"   - 🔓 Unfreeze Vision Layers: {self.unfreeze_vision_layers} (灵活策略)")
+        elif self.freeze_vision_layers is not None:
+            print(
+                f"   - 🔒 Freeze Vision Layers: {self.freeze_vision_layers} (灵活策略)")
+        elif self.freeze_vision_ratio is not None:
+            print(
+                f"   - 🔒 Freeze Vision Ratio: {self.freeze_vision_ratio:.1%} (比例策略)")
+
         print(f"   - Use Layerwise LR: {self.use_layerwise_lr}")
         if self.use_layerwise_lr:
             print(f"     - Vision Encoder LR: {self.vision_encoder_lr:.2e}")
@@ -166,53 +186,6 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
                                                 dict) and not isinstance(v, PolicyFeature) else v
             for k, v in d.items()
         }
-
-    def __post_init__(self):
-        """
-        后初始化处理
-
-        1. 首先转换所有 OmegaConf 对象为原生 Python 对象
-        2. 重新将 input_features 和 output_features 转换为 PolicyFeature 对象
-        3. 然后执行父类的验证逻辑
-        4. 最后执行 Kuavo 特定的配置验证
-        """
-        # 第一步：转换 OmegaConf 对象（必须在父类 __post_init__ 之前）
-        self._convert_omegaconf_to_native()
-
-        # 第二步：重新将 features 转换为 PolicyFeature 对象
-        # 这是必要的，因为 _convert_omegaconf_to_native 会将它们转换为字典
-        if hasattr(self, 'input_features') and self.input_features is not None:
-            self.input_features = self._normalize_feature_dict(
-                self.input_features)
-        if hasattr(self, 'output_features') and self.output_features is not None:
-            self.output_features = self._normalize_feature_dict(
-                self.output_features)
-
-        # 第三步：调用父类的后初始化
-        super().__post_init__()
-
-        # 注意：为了使用SmolVLA预训练权重，max_action_dim和max_state_dim应该为32（与预训练模型一致）
-        # Kuavo实际是16维，数据会在加载时自动填充到32维
-        if self.max_action_dim == 32 and self.max_state_dim == 32:
-            print(
-                "✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
-        elif self.max_action_dim != 32 or self.max_state_dim != 32:
-            print(
-                f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
-            print(
-                f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
-
-        # 打印SmolVLA配置摘要
-        print(f"📋 SmolVLA Config Summary (Kuavo):")
-        print(f"   - VLM Model: {self.vlm_model_name}")
-        print(
-            f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
-        print(
-            f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
-        print(f"   - Chunk Size: {self.chunk_size}")
-        print(f"   - Action Steps: {self.n_action_steps}")
-        print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
-        print(f"   - Train Expert Only: {self.train_expert_only}")
 
     def _save_pretrained(self, save_directory: Path) -> None:
         """
