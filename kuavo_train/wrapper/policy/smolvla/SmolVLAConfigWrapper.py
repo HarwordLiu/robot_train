@@ -7,7 +7,7 @@ SmolVLA Configuration Wrapper for Kuavo Project
 from dataclasses import dataclass, fields
 from pathlib import Path
 from copy import deepcopy
-from typing import TypeVar, List, Tuple
+from typing import TypeVar, List, Tuple, Optional
 import torch
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.configs.policies import PreTrainedConfig, PolicyFeature
@@ -32,25 +32,29 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
 
     # 深度相机支持
     use_depth: bool = True
-    depth_features: List[str] = None
+    depth_features: Optional[List[str]] = None
 
     # 深度图像预处理
-    depth_resize_with_padding: List[int] = None
-    depth_normalization_range: List[float] = None
+    depth_resize_with_padding: Optional[List[int]] = None
+    depth_normalization_range: Optional[List[float]] = None
     use_depth_padding: bool = True  # 深度图是否使用padding方式保持长宽比
 
     # 分层学习率支持（解锁VLM时使用）
     use_layerwise_lr: bool = False  # 是否启用分层学习率
-    vision_encoder_lr: float = None  # 视觉编码器学习率（如果为None，使用optimizer_lr）
-    expert_lr: float = None  # Action Expert学习率（如果为None，使用optimizer_lr）
+    # 视觉编码器学习率（如果为None，使用optimizer_lr）
+    vision_encoder_lr: Optional[float] = None
+    # Action Expert学习率（如果为None，使用optimizer_lr）
+    expert_lr: Optional[float] = None
 
     # 🆕 灵活的视觉层冻结配置
     # 方式1: 指定要解冻的层索引列表（推荐）
-    unfreeze_vision_layers: List[int] = None  # 例如: [-1, -2, -3] 解冻最后3层
+    unfreeze_vision_layers: Optional[List[int]
+                                     ] = None  # 例如: [-1, -2, -3] 解冻最后3层
     # 方式2: 指定要冻结的层索引列表
-    freeze_vision_layers: List[int] = None  # 例如: [0, 1, 2, 3, 4] 冻结前5层
+    # 例如: [0, 1, 2, 3, 4] 冻结前5层
+    freeze_vision_layers: Optional[List[int]] = None
     # 方式3: 使用比例（0.0-1.0）
-    freeze_vision_ratio: float = None  # 例如: 0.75 表示冻结前75%的层
+    freeze_vision_ratio: Optional[float] = None  # 例如: 0.75 表示冻结前75%的层
 
     def __post_init__(self):
         """
