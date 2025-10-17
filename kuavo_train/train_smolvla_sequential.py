@@ -882,7 +882,8 @@ def main(cfg: DictConfig):
         policy = SmolVLAPolicyWrapper.from_pretrained(
             task_cfg.task.training.pretrained_path,
             config=policy_cfg,
-            dataset_stats=dataset_stats
+            dataset_stats=dataset_stats,
+            apply_freezing=True  # 🆕 训练模式：应用视觉层冻结策略
         )
 
     elif task_cfg.task.training.resume_from == 'task':
@@ -894,7 +895,8 @@ def main(cfg: DictConfig):
         policy = SmolVLAPolicyWrapper.from_pretrained(
             resume_path,
             config=policy_cfg,
-            dataset_stats=dataset_stats
+            dataset_stats=dataset_stats,
+            apply_freezing=True  # 🆕 训练模式：应用视觉层冻结策略
         )
         print(
             f"✅ Successfully loaded Task {prev_task_id} model for sequential training")

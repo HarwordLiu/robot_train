@@ -247,6 +247,7 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         pretrained_name_or_path: str,
         config: Optional[SmolVLAConfig] = None,
         dataset_stats: Optional[Dict[str, Dict[str, torch.Tensor]]] = None,
+        apply_freezing: bool = False,  # 🆕 默认不应用冻结（推理模式）
         **kwargs
     ):
         """
@@ -258,6 +259,9 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                 - 本地路径（如'outputs/train/.../best'）
             config: 可选的配置对象（如果提供，会override预训练配置）
             dataset_stats: 数据集统计信息
+            apply_freezing: 是否应用视觉层冻结策略
+                - True: 应用冻结（训练时使用）
+                - False: 不应用冻结（推理时使用，默认）
 
         Returns:
             加载的SmolVLAPolicyWrapper实例
@@ -382,13 +386,15 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         print(f"{'='*70}\n")
 
-        # 🆕 在加载权重后重新应用灵活冻结策略
+        # 🆕 在加载权重后重新应用灵活冻结策略（仅在训练模式下）
         # 因为有些层可能在权重加载后才完全初始化
-        if (config.unfreeze_vision_layers is not None or
-            config.freeze_vision_layers is not None or
-                config.freeze_vision_ratio is not None):
+        if apply_freezing and (config.unfreeze_vision_layers is not None or
+                               config.freeze_vision_layers is not None or
+                               config.freeze_vision_ratio is not None):
             print("\n🔧 重新应用灵活视觉层冻结策略（在权重加载后）...")
             model._apply_flexible_vision_freezing()
+        elif not apply_freezing:
+            print("\n💡 推理模式：跳过视觉层冻结策略应用（所有层正常工作）")
 
         return model
 
