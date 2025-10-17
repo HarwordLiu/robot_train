@@ -439,24 +439,45 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
             return
 
         # 获取 vision_model（SmolVLM的视觉编码器）
+        # 完整路径: self.model.vlm_with_expert.vlm.model.vision_model
         try:
-            # 尝试多种访问路径
-            if hasattr(self, 'model') and hasattr(self.model, 'get_vlm_model'):
+            vision_model = None
+
+            # 路径1: 通过 model.vlm_with_expert
+            if hasattr(self, 'model') and hasattr(self.model, 'vlm_with_expert'):
+                vlm_with_expert = self.model.vlm_with_expert
+                if hasattr(vlm_with_expert, 'get_vlm_model'):
+                    vlm_model = vlm_with_expert.get_vlm_model()
+                    if hasattr(vlm_model, 'vision_model'):
+                        vision_model = vlm_model.vision_model
+
+            # 路径2: 直接通过 model 的 get_vlm_model
+            if vision_model is None and hasattr(self, 'model') and hasattr(self.model, 'get_vlm_model'):
                 vlm_model = self.model.get_vlm_model()
                 if hasattr(vlm_model, 'vision_model'):
                     vision_model = vlm_model.vision_model
-                else:
-                    print("⚠️  VLM model 没有 vision_model 属性，跳过灵活冻结策略")
-                    return
-            elif hasattr(self, 'vlm') and hasattr(self.vlm, 'model') and hasattr(self.vlm.model, 'vision_model'):
-                # 备用路径：直接访问 vlm
-                vision_model = self.vlm.model.vision_model
-            else:
+
+            # 路径3: 如果 self 本身是 VLAFlowMatching
+            if vision_model is None and hasattr(self, 'vlm_with_expert'):
+                if hasattr(self.vlm_with_expert, 'get_vlm_model'):
+                    vlm_model = self.vlm_with_expert.get_vlm_model()
+                    if hasattr(vlm_model, 'vision_model'):
+                        vision_model = vlm_model.vision_model
+
+            if vision_model is None:
                 print("⚠️  无法找到 vision_model，跳过灵活冻结策略")
-                print(f"   可用属性: {dir(self)[:5]}...")
+                print(f"   DEBUG: self 类型: {type(self).__name__}")
+                if hasattr(self, 'model'):
+                    print(
+                        f"   DEBUG: self.model 类型: {type(self.model).__name__}")
+                    if hasattr(self.model, 'vlm_with_expert'):
+                        print(f"   DEBUG: self.model.vlm_with_expert 存在")
                 return
+
         except Exception as e:
             print(f"⚠️  访问 vision_model 时出错: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         # 获取视觉编码器的所有层
