@@ -150,7 +150,7 @@ training:
   target_action_dim: 32 # 目标动作维度（与预训练模型一致）
 
   # 数据加载（解锁VLM后需要降低batch_size）
-  batch_size: 28 # 从64降低到16，适应解锁VLM的显存需求
+  batch_size: 64 # 从64降低到16，适应解锁VLM的显存需求
   num_workers: 14 # 降低worker数量，避免CPU资源竞争
   drop_last: True
   prefetch_factor: 2 # 增加预取，提高GPU利用率
