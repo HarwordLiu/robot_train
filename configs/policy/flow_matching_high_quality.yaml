@@ -31,7 +31,7 @@ training:
   accumulation_steps: 1
 
   batch_size: 64
-  num_workers: 14
+  num_workers: 12
   drop_last: False
 
   max_training_step: null
