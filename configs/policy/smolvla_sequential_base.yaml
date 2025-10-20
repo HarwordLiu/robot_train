@@ -33,7 +33,7 @@ policy:
   # 冻结策略（防止灾难性遗忘的关键）
   freeze_vision_encoder: True
   train_expert_only: True
-  train_state_proj: True
+  train_state_proj: True # 训练state投影层
 
   # ==================== 🆕 灵活的视觉层冻结策略 ====================
   # ⚠️  SmolVLA (SmolVLM2-500M) 视觉编码器共 12 层 (Layer 0-11)
