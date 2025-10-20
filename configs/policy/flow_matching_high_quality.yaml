@@ -9,7 +9,7 @@ hydra:
     dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
     subdir: ${hydra:job.override_dirname}
 
-task: 'task_300_episodes'
+task: 'flow_matching_task_1'
 method: 'flow_matching_high_quality' # 高质量版本
 timestamp: ${now:%Y%m%d_%H%M%S}
 episodes_to_use:
