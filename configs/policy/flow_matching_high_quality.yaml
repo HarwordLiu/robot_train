@@ -1,0 +1,246 @@
+# ==================== Flow Matching 高质量配置 ====================
+# 优先考虑生成质量，适合第一版本训练和离线评估
+# 基于 flow_matching_config.yaml，但针对质量优化
+
+hydra:
+  run:
+    dir: ./outputs/train_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+task: 'task_300_episodes'
+method: 'flow_matching_high_quality' # 高质量版本
+timestamp: ${now:%Y%m%d_%H%M%S}
+episodes_to_use:
+  - 0
+  - 199
+
+repoid: 'lerobot/${task}'
+root: '/root/robot/data/task-1/1-2000/lerobot/'
+
+# 训练相关配置
+training:
+  output_directory: 'outputs/train/${task}/${method}'
+  seed: 42
+  max_epoch: 500
+
+  save_freq_epoch: 10
+  log_freq: 1
+  device: 'cuda'
+  accumulation_steps: 1
+
+  batch_size: 64
+  num_workers: 14
+  drop_last: False
+
+  max_training_step: null
+  resume: False
+
+  # 数据增强配置（保持不变）
+  RGB_Augmenter:
+    enable: True
+    max_num_transforms: 1
+    random_order: True
+    tfs:
+      notransform:
+        weight: 2.0
+        type: 'Identity'
+        kwargs: {}
+      brightness:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'brightness': [0.5, 1.5] }
+      contrast:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'contrast': [0.5, 1.5] }
+      saturation:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'saturation': [0.5, 1.5] }
+      hue:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'hue': [-0.05, 0.05] }
+      sharpness:
+        weight: 1.0
+        type: 'SharpnessJitter'
+        kwargs: { 'sharpness': [0.5, 1.5] }
+      random_mask:
+        weight: 1.0
+        type: RandomMask
+        kwargs:
+          mask_size: [0.1, 0.1]
+      random_border_cutout:
+        weight: 1.0
+        type: RandomBorderCutout
+        kwargs:
+          cut_ratio: 0.15
+      gaussian_noise:
+        weight: 1.0
+        type: GaussianNoise
+        kwargs:
+          mean: 0.0
+          std: 0.05
+      gamma_correction:
+        weight: 1.0
+        type: GammaCorrection
+        kwargs:
+          gamma: [0.5, 2.0]
+
+policy_name: diffusion
+
+policy:
+  _target_: kuavo_train.wrapper.policy.diffusion.DiffusionConfigWrapper.CustomDiffusionConfigWrapper
+  horizon: 16
+  n_action_steps: 8
+  drop_n_last_frames: 7
+
+  normalization_mapping:
+    RGB:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+    DEPTH:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MIN_MAX
+
+  crop_is_random: True
+  crop_shape: [420, 560]
+  use_amp: True
+
+  # 模型超参数
+  vision_backbone: resnet18
+  spatial_softmax_num_keypoints: 64
+  use_separate_rgb_encoder_per_camera: False
+
+  down_dims:
+    - 512
+    - 1024
+    - 2048
+  kernel_size: 5
+  n_groups: 8
+
+  diffusion_step_embed_dim: 128
+  use_film_scale_modulation: true
+
+  # ==================== Flow Matching 高质量配置 ====================
+  # 🎯 优先质量配置
+  use_flow_matching: True
+
+  # ========== 核心参数：优先质量 ==========
+
+  # 1. Flow Matching 类型：使用最成熟稳定的 conditional
+  flow_matching_type: 'conditional'
+  # 说明: conditional 是最稳定的选择，经过充分验证
+
+  # 2. 噪声水平：完全确定性
+  flow_sigma: 0.0
+  # 说明: 0.0 = 完全确定性，最高质量，结果可复现
+
+  # 3. ODE 求解器：使用高精度 RK4
+  ode_solver: 'rk4'
+  # 说明: RK4 比 Euler 精确得多，但需要 4 倍前向传播
+  #       质量优先时推荐使用
+
+  # 4. 推理步数：使用较多步数保证质量
+  num_inference_steps: 30
+  # 说明: 30 步提供高质量结果，比 Diffusion 的 50-100 步仍快很多
+  #       如果质量还不够，可以增加到 50
+
+  # ==================== 质量 vs 速度权衡 ====================
+  #
+  # 当前配置（质量优先）:
+  #   - RK4 + 30 步 ≈ 240ms/action（估算）
+  #   - 质量：⭐⭐⭐⭐⭐ (最高)
+  #
+  # 如果需要平衡:
+  #   - ode_solver: 'euler'
+  #   - num_inference_steps: 20
+  #   - ≈ 40-50ms/action
+  #   - 质量：⭐⭐⭐⭐
+  #
+  # 如果需要极速:
+  #   - ode_solver: 'euler'
+  #   - num_inference_steps: 10
+  #   - ≈ 20-25ms/action
+  #   - 质量：⭐⭐⭐
+
+  # ==================== 后续优化建议 ====================
+  #
+  # 第一阶段（当前 - 质量验证）:
+  #   ✅ 使用高质量配置训练
+  #   ✅ 验证 Flow Matching 效果
+  #   ✅ 对比 Diffusion baseline
+  #
+  # 第二阶段（质量确认后 - 速度优化）:
+  #   1. 尝试减少推理步数: 30 → 20 → 15
+  #   2. 测试 Euler vs RK4 的质量差异
+  #   3. 找到最佳的质量-速度平衡点
+  #
+  # 第三阶段（部署优化）:
+  #   1. 根据实际任务需求调整
+  #   2. 实时任务：10-15 步 + Euler
+  #   3. 离线任务：30-50 步 + RK4
+
+  # 以下 Diffusion 参数保留以兼容
+  noise_scheduler_type: DDPM
+  num_train_timesteps: 100
+  beta_schedule: squaredcos_cap_v2
+  beta_start: 0.0001
+  beta_end: 0.02
+  prediction_type: epsilon
+  clip_sample: true
+  clip_sample_range: 1.0
+  do_mask_loss_for_padding: false
+
+  # optimizer and scheduler
+  optimizer_lr: 0.0001
+  optimizer_betas:
+    - 0.95
+    - 0.999
+  optimizer_eps: 1.0e-08
+  optimizer_weight_decay: 1.0e-03
+  scheduler_name: cosine
+  scheduler_warmup_steps: 500
+
+  custom:
+    # 深度图像支持
+    use_depth: True
+    depth_backbone: resnet18
+    use_separate_depth_encoder_per_camera: False
+
+    # resize 和增强
+    resize_shape: [210, 280]
+
+    # state encoder
+    use_state_encoder: True
+    state_feature_dim: 128
+
+    # 网络架构
+    use_unet: False
+    use_transformer: True
+    transformer_n_emb: 512
+    transformer_n_head: 8
+    transformer_n_layer: 4
+    transformer_dropout: 0.1
+# ==================== 使用说明 ====================
+#
+# 1. 训练命令:
+#    python train_policy.py policy=flow_matching_high_quality
+#
+# 2. 预期效果:
+#    - 训练稳定性: ⭐⭐⭐⭐⭐
+#    - 生成质量: ⭐⭐⭐⭐⭐
+#    - 推理速度: ⭐⭐⭐ (仍比 Diffusion 快 2-3 倍)
+#
+# 3. 后续调整:
+#    如果质量已经很好，想提速：
+#      a. 降低推理步数: 30 → 20
+#      b. 切换求解器: rk4 → euler
+#
+#    如果质量还不够好：
+#      a. 增加推理步数: 30 → 50
+#      b. 检查训练是否充分收敛
+#      c. 尝试增加 flow_sigma (如 0.001) 增加多样性
+

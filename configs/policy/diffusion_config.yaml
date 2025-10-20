@@ -131,7 +131,16 @@ policy:
   diffusion_step_embed_dim: 128
   use_film_scale_modulation: true
 
-  # diffusion settings:
+  # ==================== Diffusion / Flow Matching 设置 ====================
+  # 切换开关：设置为 True 使用 Flow Matching，False 使用传统 Diffusion
+  use_flow_matching: False # 默认使用 Diffusion，改为 True 启用 Flow Matching
+
+  # Flow Matching 专用配置（当 use_flow_matching=True 时生效）
+  flow_matching_type: 'conditional' # 类型: conditional, optimal_transport, rectified
+  flow_sigma: 0.0 # 噪声水平（0表示确定性流）
+  ode_solver: 'euler' # ODE求解器: euler, rk4
+
+  # Diffusion 专用配置（当 use_flow_matching=False 时生效）
   noise_scheduler_type: DDPM
   num_train_timesteps: 100
   beta_schedule: squaredcos_cap_v2
@@ -140,8 +149,12 @@ policy:
   prediction_type: epsilon
   clip_sample: true
   clip_sample_range: 1.0
-  num_inference_steps: null
   do_mask_loss_for_padding: false
+
+  # 通用推理配置（两种方法都使用）
+  # Flow Matching 推荐: 10-20 步
+  # Diffusion 推荐: 50-100 步
+  num_inference_steps: null # null 表示使用默认值
 
   # optimizer and scheduler
   optimizer_lr: 0.0001
