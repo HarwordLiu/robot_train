@@ -31,9 +31,9 @@ policy:
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
-  freeze_vision_encoder: False # 解锁视觉编码器参与训练
-  train_expert_only: False # 训练整个模型（VLM + Action Expert）
-  train_state_proj: True # 训练state投影层
+  freeze_vision_encoder: True
+  train_expert_only: True
+  train_state_proj: True
 
   # ==================== 🆕 灵活的视觉层冻结策略 ====================
   # ⚠️  SmolVLA (SmolVLM2-500M) 视觉编码器共 12 层 (Layer 0-11)
@@ -108,7 +108,7 @@ policy:
   use_depth_padding: True # 深度图使用padding方式保持长宽比 (推荐用于高精度任务)
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
-  num_steps: 10 # 推理时的去噪步数
+  num_steps: 50 # 推理时的去噪步数
 
   # 归一化配置
   normalization_mapping:
