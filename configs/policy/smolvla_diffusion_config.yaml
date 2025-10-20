@@ -1,0 +1,202 @@
+# ==================== SmolVLA Diffusion 训练配置 ====================
+# 基于 SmolVLA 但使用 Diffusion 而非 Flow Matching 进行动作生成
+# 冻结所有视觉层，专注于训练动作生成能力
+
+defaults:
+  - _self_
+
+# Hydra配置
+hydra:
+  run:
+    dir: ./outputs/train_hydra_save/smolvla_diffusion/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: ./outputs/train_hydra_save/smolvla_diffusion/multirun/${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra:job.override_dirname}
+
+timestamp: ${now:%Y%m%d_%H%M%S}
+method: 'smolvla_diffusion'
+
+# 任务配置
+task: 'task1_moving_grasp'  # 默认任务1
+
+# ==================== SmolVLA Diffusion 策略配置 ====================
+policy_name: smolvla_diffusion
+
+policy:
+  _target_: kuavo_train.wrapper.policy.smolvla.SmolVLADiffusionConfigWrapper
+
+  # VLM Backbone配置
+  vlm_model_name: 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'
+  load_vlm_weights: True
+
+  # 冻结策略（完全冻结视觉层）
+  freeze_vision_encoder: True  # 完全冻结视觉编码器
+  train_expert_only: True      # 只训练 Action Expert
+  train_state_proj: True       # 训练 state 投影层
+
+  # 视觉层配置（不再使用灵活解冻）
+  unfreeze_vision_layers: null    # 不解冻任何层
+  freeze_vision_layers: null      # 不使用特定冻结列表
+  freeze_vision_ratio: null       # 不使用比例冻结
+
+  # 观测配置
+  n_obs_steps: 1
+
+  # 动作空间配置
+  max_state_dim: 32
+  max_action_dim: 32
+  chunk_size: 50
+  n_action_steps: 8
+
+  # 图像预处理配置
+  resize_imgs_with_padding: [512, 512]
+  empty_cameras: 0
+
+  # 深度相机支持配置
+  use_depth: True
+  depth_features:
+    - 'observation.depth_h'
+    - 'observation.depth_l'
+    - 'observation.depth_r'
+  depth_resize_with_padding: [512, 512]
+  depth_normalization_range: [0.0, 1000.0]
+  use_depth_padding: True
+
+  # ==================== Diffusion 配置 ====================
+  # 替换 Flow Matching 为 Diffusion
+  use_diffusion: True
+
+  # Diffusion 参数
+  num_inference_steps: 50      # 推理时的去噪步数（比Flow Matching的10步多）
+  num_train_timesteps: 1000    # 训练时的总时间步数
+  noise_schedule: "linear"     # 噪声调度：linear, cosine, sqrt_linear
+  prediction_type: "epsilon"   # 预测类型：epsilon, v_prediction, sample
+
+  # 噪声调度参数
+  beta_start: 0.0001           # 起始噪声强度
+  beta_end: 0.02               # 结束噪声强度
+
+  # DDIM 采样配置（可选，用于加速推理）
+  use_ddim_sampling: True      # 使用 DDIM 采样加速推理
+  ddim_eta: 0.0                # DDIM 的随机性参数（0为确定性）
+
+  # 归一化配置
+  normalization_mapping:
+    VISUAL:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: IDENTITY
+    STATE:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+    ACTION:
+      _target_: lerobot.configs.types.NormalizationMode
+      value: MEAN_STD
+
+  # 优化器配置（针对 Diffusion 调整）
+  optimizer_betas: [0.9, 0.999]
+  optimizer_eps: 1.0e-08
+  optimizer_weight_decay: 1.0e-6
+  optimizer_grad_clip_norm: 1.0
+
+  # 学习率配置（Diffusion 通常需要较低的学习率）
+  use_layerwise_lr: False      # 简化学习率策略
+  vision_encoder_lr: null      # 视觉层冻结，不需要
+  expert_lr: null              # 使用统一的学习率
+  optimizer_lr: 2.0e-5         # 统一学习率（比Flow Matching稍低）
+
+  # 学习率调度器配置
+  scheduler_warmup_steps: 2000
+  scheduler_decay_steps: 30000
+  scheduler_decay_lr: 1e-6
+
+# ==================== 训练配置 ====================
+training:
+  output_directory: 'outputs/train/${task}/${method}'
+  device: 'cuda'
+  seed: 42
+
+  # 动作维度适配配置
+  target_action_dim: 32
+
+  # 数据加载（Diffusion 可能需要更多显存）
+  batch_size: 24               # 从28降低到24
+  num_workers: 14
+  drop_last: True
+  prefetch_factor: 2
+  persistent_workers: True
+
+  # 日志和保存
+  save_freq_epoch: 3
+  log_freq: 50
+
+  # 验证配置
+  validate_all_previous_tasks: True
+  validation_freq_epoch: 2
+  validation_episodes: 20
+
+  # ==================== RGB数据增广配置 ====================
+  # 与 Flow Matching 保持一致
+  RGB_Augmenter:
+    enable: True
+    max_num_transforms: 1
+    random_order: True
+    tfs:
+      notransform:
+        weight: 2.0
+        type: 'Identity'
+        kwargs: {}
+      brightness:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'brightness': [0.7, 1.3] }
+      contrast:
+        weight: 1.0
+        type: 'ColorJitter'
+        kwargs: { 'contrast': [0.7, 1.3] }
+      saturation:
+        weight: 0.8
+        type: 'ColorJitter'
+        kwargs: { 'saturation': [0.7, 1.3] }
+      hue:
+        weight: 0.5
+        type: 'ColorJitter'
+        kwargs: { 'hue': [-0.03, 0.03] }
+      sharpness:
+        weight: 0.8
+        type: 'SharpnessJitter'
+        kwargs: { 'sharpness': [0.7, 1.3] }
+      gaussian_noise:
+        weight: 0.5
+        type: GaussianNoise
+        kwargs:
+          mean: 0.0
+          std: 0.03
+      gamma_correction:
+        weight: 0.8
+        type: GammaCorrection
+        kwargs:
+          gamma: [0.7, 1.3]
+
+# ==================== 顺序训练策略配置 ====================
+sequential:
+  # Replay Buffer 配置（与原配置保持一致）
+  use_replay_buffer: True
+  replay_strategy: 'proportional'
+
+  # Stage 2
+  stage2_replay:
+    task1: 0.2
+    task2: 0.8
+
+  # Stage 3
+  stage3_replay:
+    task1: 0.1
+    task2: 0.2
+    task3: 0.7
+
+  # Stage 4
+  stage4_replay:
+    task1: 0.1
+    task2: 0.1
+    task3: 0.2
+    task4: 0.6
