@@ -30,7 +30,7 @@ policy:
   vlm_model_name: 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct' # 使用镜像源下载
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
-  # 冻结策略（防止灾难性遗忘的关键）
+  # 冻结策略
   freeze_vision_encoder: True
   train_expert_only: True
   train_state_proj: True # 训练state投影层
@@ -61,7 +61,8 @@ policy:
 
   # 🎯 默认策略：平衡策略（解冻9层，适合1500-2500 episodes）
   # 冻结前3层（25%），解冻后9层（75%）
-  unfreeze_vision_layers: [-1, -2, -3, -4, -5, -6, -7, -8, -9] # 解冻 Layer 3-11
+  # unfreeze_vision_layers: [-1, -2, -3, -4, -5, -6, -7, -8, -9] # 解冻 Layer 3-11
+  unfreeze_vision_layers: null
 
   # 📋 其他可选策略（根据数据量选择，取消注释使用）：
   #
