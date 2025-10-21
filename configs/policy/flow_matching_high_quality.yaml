@@ -14,7 +14,7 @@ method: 'flow_matching_high_quality' # 高质量版本
 timestamp: ${now:%Y%m%d_%H%M%S}
 episodes_to_use:
   - 0
-  - 999
+  - 499
 
 repoid: 'lerobot/${task}'
 root: '/root/robot/data/task-1/1-2000/lerobot/'
@@ -31,7 +31,7 @@ training:
   accumulation_steps: 1
 
   batch_size: 64
-  num_workers: 12
+  num_workers: 14
   drop_last: False
 
   max_training_step: null
