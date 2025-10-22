@@ -7,7 +7,7 @@ hydra: # Hydra 配置文件保存目录，仅供参数检查使用
 
 # kuavo rosbag数据转换成lerobot-parquet格式0配置文件
 rosbag:
-  rosbag_dir: /root/robot/data/temp # rosbag文件目录
+  rosbag_dir: /root/robot/data/task-3/temp # rosbag文件目录
   num_used: null # 使用的rosbag数量(若设置为任意数字，则会随机采样选择)
   lerobot_dir: /root/robot/data/task-3 # 转换后的lerobot文件的保存目录
   batch_size: 1000 # 每批处理的rosbag文件数量，会创建对应的子文件夹(如1-400, 401-800等)
