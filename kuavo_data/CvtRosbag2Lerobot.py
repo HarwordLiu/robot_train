@@ -480,8 +480,6 @@ def populate_dataset(
                     min_depth, max_dpeth = kuavo.DEPTH_RANGE[0], kuavo.DEPTH_RANGE[1]
                     frame[f"observation.{camera}"] = np.clip(
                         img_array[i], min_depth, max_dpeth)
-                    print("[info]: Clip depth in range %d ~ %d" %
-                          (min_depth, max_dpeth))
                 else:
                     frame[f"observation.images.{camera}"] = img_array[i]
 
