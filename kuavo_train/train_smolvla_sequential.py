@@ -29,7 +29,9 @@ SmolVLA顺序多任务训练脚本
         task=tasks/task2_weighing
 """
 
-# Ensure custom patches are applied
+# Ensure custom patches are applied FIRST before any lerobot imports
+import lerobot_patches.custom_patches
+
 import random
 from kuavo_train.utils.augmenter import DeterministicAugmenterColor
 from kuavo_train.utils.utils import save_rng_state, load_rng_state
@@ -50,7 +52,6 @@ from functools import partial
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 import hydra
-import lerobot_patches.custom_patches
 
 import os
 # 消除tokenizers fork警告
@@ -772,6 +773,13 @@ def main(cfg: DictConfig):
     output_features = {k: ft for k,
                        ft in features.items() if ft.type is FeatureType.ACTION}
 
+    # 调试：打印input_features
+    print("\n🔍 Debug: Input Features")
+    print("="*70)
+    for key, ft in input_features.items():
+        print(f"  {key}: type={ft.type}, shape={ft.shape}")
+    print("="*70 + "\n")
+
     dataset_stats = dataset_metadata.stats
 
     # 填充dataset_stats到目标维度（Kuavo 16维 → SmolVLA 32维）
@@ -798,6 +806,16 @@ def main(cfg: DictConfig):
         policy_cfg.optimizer_lr = task_cfg.task.training.policy.optimizer_lr
         policy_cfg.scheduler_warmup_steps = task_cfg.task.training.policy.scheduler_warmup_steps
         policy_cfg.scheduler_decay_steps = task_cfg.task.training.policy.scheduler_decay_steps
+
+    # 调试：打印policy_cfg的features
+    print("\n🔍 Debug: Policy Config Features")
+    print("="*70)
+    print(f"input_features keys: {list(policy_cfg.input_features.keys())}")
+    print(f"image_features keys: {list(policy_cfg.image_features.keys())}")
+    print("\nImage features detail:")
+    for key, ft in policy_cfg.image_features.items():
+        print(f"  {key}: type={ft.type}, shape={ft.shape}")
+    print("="*70 + "\n")
 
     # ==================== 加载/创建模型 ====================
     if task_cfg.task.training.resume_from == 'pretrained':
