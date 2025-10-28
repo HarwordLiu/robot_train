@@ -134,7 +134,8 @@ def img_preprocess_smolvla(image, device="cpu", target_size=(512, 512)):
     right = pad_w - left
 
     # 使用黑色padding
-    padded = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)
+    padded = cv2.copyMakeBorder(
+        resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)
 
     return to_tensor(padded).unsqueeze(0).to(device, non_blocking=True)
 
@@ -164,7 +165,8 @@ def img_preprocess(image, device="cpu", target_size=None, crop_size=448):
 
     # 2. Resize到目标尺寸
     if target_size is not None and (image.shape[0] != target_size[0] or image.shape[1] != target_size[1]):
-        image = cv2.resize(image, (target_size[1], target_size[0]), interpolation=cv2.INTER_LINEAR)
+        image = cv2.resize(
+            image, (target_size[1], target_size[0]), interpolation=cv2.INTER_LINEAR)
 
     return to_tensor(image).unsqueeze(0).to(device, non_blocking=True)
 
@@ -172,13 +174,13 @@ def img_preprocess(image, device="cpu", target_size=None, crop_size=448):
 def depth_preprocess(depth, device="cpu", target_size=None, crop_size=448):
     """
     预处理深度图像（与训练保持一致：先crop再resize）
-    
+
     Args:
         depth: numpy array, shape (1, H, W)
         device: torch device
         target_size: tuple (height, width), resize的目标尺寸
         crop_size: int, 中心裁剪的尺寸（默认448与训练一致）
-    
+
     Returns:
         torch tensor, shape (1, 1, H, W)
     """
@@ -193,14 +195,15 @@ def depth_preprocess(depth, device="cpu", target_size=None, crop_size=448):
         right = min(w, left + crop_size)
         depth_2d = depth_2d[top:bottom, left:right]
         depth = depth_2d[numpy.newaxis, ...]
-    
+
     # 2. Resize到目标尺寸（使用NEAREST避免深度值被插值）
     if target_size is not None and depth.shape[0] == 1:
         depth_2d = depth[0]
         if depth_2d.shape[0] != target_size[0] or depth_2d.shape[1] != target_size[1]:
-            depth_2d = cv2.resize(depth_2d, (target_size[1], target_size[0]), interpolation=cv2.INTER_NEAREST)
+            depth_2d = cv2.resize(
+                depth_2d, (target_size[1], target_size[0]), interpolation=cv2.INTER_NEAREST)
         depth = depth_2d[numpy.newaxis, ...]
-    
+
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
 
 
@@ -239,7 +242,8 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
             Path(pretrained_path), strict=True)
         # Log VLA specific info
         log_model.info(f"📊 Token dim: {policy.config.token_embed_dim}")
-        log_model.info(f"📊 Transformer depth: {policy.config.transformer_depth}")
+        log_model.info(
+            f"📊 Transformer depth: {policy.config.transformer_depth}")
     elif policy_type == 'smolvla':
         log_model.info("🤖 Loading SmolVLA Policy...")
         policy = SmolVLAPolicyWrapper.from_pretrained(
@@ -248,7 +252,8 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
         log_model.info(f"📊 VLM Model: {policy.config.vlm_model_name}")
         log_model.info(f"📊 Action chunk size: {policy.config.chunk_size}")
         log_model.info(f"📊 Max action dim: {policy.config.max_action_dim}")
-        log_model.info(f"📊 Vision encoder frozen: {policy.config.freeze_vision_encoder}")
+        log_model.info(
+            f"📊 Vision encoder frozen: {policy.config.freeze_vision_encoder}")
     else:
         raise ValueError(
             f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion', 'vla_transformer', 'smolvla'")
@@ -260,6 +265,41 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
     log_model.info(f"Model loaded from {pretrained_path}")
     log_model.info(f"Model n_obs_steps: {policy.config.n_obs_steps}")
     log_model.info(f"Model device: {device}")
+
+    # Warmup inference for SmolVLA to reduce first inference latency
+    if policy_type == 'smolvla':
+        warmup_iterations = 2
+        log_model.info(
+            f"🔥 Warming up SmolVLA model with {warmup_iterations} dummy inferences...")
+
+        # Create dummy observations matching SmolVLA input format
+        dummy_obs = {
+            # Dummy image: [1, 3, 512, 512]
+            "observation.images.cam_high": torch.zeros((1, 3, 512, 512), dtype=torch.float32, device=device),
+            # Dummy state: [1, 32] (SmolVLA uses 32D state)
+            "observation.state": torch.zeros((1, 32), dtype=torch.float32, device=device),
+            # Use a default language instruction for warmup
+            "task": ["Pick up the object from the table"]
+        }
+
+        warmup_times = []
+        with torch.no_grad():
+            for i in range(warmup_iterations):
+                start_time = time.time()
+                _ = policy.select_action(dummy_obs)
+                warmup_time = (time.time() - start_time) * \
+                    1000  # Convert to ms
+                warmup_times.append(warmup_time)
+                log_model.info(
+                    f"  Warmup {i+1}/{warmup_iterations}: {warmup_time:.2f}ms")
+
+        avg_warmup_time = np.mean(warmup_times)
+        log_model.info(
+            f"✅ Warmup completed! Average time: {avg_warmup_time:.2f}ms")
+        log_model.info(f"💡 First actual inference should now be faster")
+
+        # Reset policy state after warmup
+        policy.reset()
 
     return policy
 
@@ -351,7 +391,7 @@ def main(config_path: str, episode: int):
     timestamp = cfg.timestamp
     epoch = cfg.epoch
     env_name = cfg.env_name
-    
+
     # 获取目标图像尺寸（用于模型输入）
     target_image_size = None
     if hasattr(cfg, 'target_image_size') and cfg.target_image_size is not None:
@@ -471,20 +511,25 @@ def main(config_path: str, episode: int):
             if "images" in k:
                 # SmolVLA uses padding instead of cropping
                 if policy_type == 'smolvla':
-                    observation[k] = img_preprocess_smolvla(v, device=device, target_size=target_image_size)
+                    observation[k] = img_preprocess_smolvla(
+                        v, device=device, target_size=target_image_size)
                 else:
-                    observation[k] = img_preprocess(v, device=device, target_size=target_image_size)
+                    observation[k] = img_preprocess(
+                        v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
             elif "state" in k:
-                state_tensor = torch.from_numpy(v).float().unsqueeze(0).to(device, non_blocking=True)
+                state_tensor = torch.from_numpy(v).float().unsqueeze(
+                    0).to(device, non_blocking=True)
                 # SmolVLA expects 32D state, pad from 16D
                 if policy_type == 'smolvla' and state_tensor.shape[-1] == 16:
-                    pad_zeros = torch.zeros((state_tensor.shape[0], 16), dtype=state_tensor.dtype, device=device)
+                    pad_zeros = torch.zeros(
+                        (state_tensor.shape[0], 16), dtype=state_tensor.dtype, device=device)
                     state_tensor = torch.cat([state_tensor, pad_zeros], dim=-1)
                 observation[k] = state_tensor
                 observation_shapes[k] = observation[k].shape
             elif "depth" in k:
-                observation[k] = depth_preprocess(v, device=device, target_size=target_image_size)
+                observation[k] = depth_preprocess(
+                    v, device=device, target_size=target_image_size)
                 observation_shapes[k] = observation[k].shape
 
         # Add language instruction for SmolVLA
