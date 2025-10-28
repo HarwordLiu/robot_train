@@ -95,7 +95,8 @@ training:
   log_freq: 10
 
   # 多任务验证配置（防遗忘的关键）
-  validate_all_previous_tasks: True
+  # 方案A：单任务专用模型，不需要验证之前的任务
+  validate_all_previous_tasks: False
   validation_freq_epoch: 1 # 从2改为1，更频繁验证及早发现问题
   validation_episodes: 20 # 更多验证episodes，评估更准确
 
