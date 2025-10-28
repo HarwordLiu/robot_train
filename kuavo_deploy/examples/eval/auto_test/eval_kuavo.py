@@ -273,14 +273,30 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
             f"🔥 Warming up SmolVLA model with {warmup_iterations} dummy inferences...")
 
         # Create dummy observations matching SmolVLA input format
-        dummy_obs = {
-            # Dummy image: [1, 3, 512, 512]
-            "observation.images.cam_high": torch.zeros((1, 3, 512, 512), dtype=torch.float32, device=device),
-            # Dummy state: [1, 32] (SmolVLA uses 32D state)
-            "observation.state": torch.zeros((1, 32), dtype=torch.float32, device=device),
-            # Use a default language instruction for warmup
-            "task": ["Pick up the object from the table"]
-        }
+        # Automatically get the correct feature keys from policy config
+        dummy_obs = {}
+
+        # Add dummy images for each expected image feature
+        for feature_name, feature_info in policy.config.input_features.items():
+            if 'image' in feature_name.lower():
+                # Get expected shape from config or use default (512, 512)
+                if hasattr(feature_info, 'shape') and len(feature_info.shape) == 3:
+                    channels, height, width = feature_info.shape
+                else:
+                    channels, height, width = 3, 512, 512
+                dummy_obs[feature_name] = torch.zeros(
+                    (1, channels, height, width), dtype=torch.float32, device=device)
+                log_model.debug(
+                    f"  Created dummy image for {feature_name}: [{1}, {channels}, {height}, {width}]")
+            elif 'state' in feature_name.lower():
+                # SmolVLA uses 32D state
+                dummy_obs[feature_name] = torch.zeros(
+                    (1, 32), dtype=torch.float32, device=device)
+                log_model.debug(
+                    f"  Created dummy state for {feature_name}: [1, 32]")
+
+        # Add language instruction
+        dummy_obs['task'] = ["Pick up the object from the table"]
 
         warmup_times = []
         with torch.no_grad():
