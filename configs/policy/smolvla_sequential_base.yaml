@@ -91,7 +91,7 @@ training:
   drop_last: True # 保证每个batch大小一致，避免BN层统计偏差
 
   # 日志和保存
-  save_freq_epoch: 10 # 每10个epoch保存一次checkpoint
+  save_freq_epoch: 3 # 每3个epoch保存一次checkpoint（方案A：更频繁保存）
   log_freq: 10
 
   # 多任务验证配置（防遗忘的关键）
