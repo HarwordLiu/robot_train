@@ -14,7 +14,7 @@ task:
 
   # 数据配置
   data:
-    root: '/root/robot/data/task4/data/lerobot/1-400/'
+    root: '/root/robot/data/task-1/1-2000/lerobot/'
     repoid: 'lerobot/task4_sorting'
     episodes_to_use: [0, 199]
 

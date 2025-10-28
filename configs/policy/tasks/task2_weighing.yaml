@@ -14,7 +14,7 @@ task:
 
   # 数据配置
   data:
-    root: '/root/robot/data/task2/data/lerobot/1-400/'
+    root: '/root/robot/data/task-2/1-2000/'
     repoid: 'lerobot/task2_weighing'
     episodes_to_use: [0, 199]
 
