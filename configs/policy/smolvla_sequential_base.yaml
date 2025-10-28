@@ -100,11 +100,14 @@ training:
   validation_episodes: 20 # 更多验证episodes，评估更准确
 
 # ==================== 顺序训练策略配置 ====================
+# 方案 A：单任务专用模型配置
+# 关闭 replay buffer，每个任务独立训练以最大化单任务性能
 sequential:
-  # 是否使用Replay Buffer（防遗忘的核心技术）
-  use_replay_buffer: True
-  replay_strategy: 'proportional' # 比例混合策略
+  # 是否使用Replay Buffer（已关闭 - 方案A）
+  use_replay_buffer: False # ⚠️ 关闭多任务混合训练
+  replay_strategy: 'none' # 不使用replay策略
 
+  # 以下replay配置仅在 use_replay_buffer=True 时生效
   # Stage 2: 训练任务2时的数据混合比例
   stage2_replay:
     task1: 0.2 # 20% 任务1数据

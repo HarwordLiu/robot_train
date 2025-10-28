@@ -3,14 +3,14 @@
 # 任务基本信息
 task:
   id: 3
-  name: "placement"
-  stage: 3  # Stage 3: 从任务2模型继续
+  name: 'placement'
+  stage: 3 # Stage 3: 从任务2模型继续
 
   # 任务描述（中文）
-  description: "机器人从杂乱摆放的日化瓶中随机拾取一瓶，传递至另一只手后，再按照指定姿态将其摆放在目标位置。瓶身摆放要求：瓶口位于黄色区域外部；瓶身大部分位于黄色区域内部；瓶身标签面朝上"
+  description: '机器人从杂乱摆放的日化瓶中随机拾取一瓶，传递至另一只手后，再按照指定姿态将其摆放在目标位置。瓶身摆放要求：瓶口位于黄色区域外部；瓶身大部分位于黄色区域内部；瓶身标签面朝上'
 
   # Language Instruction（英文）
-  language_instruction: "Pick up a bottle from the cluttered daily chemical bottles, transfer it to the other hand, and place it in the specified pose with the label facing up in the yellow area. Requirements: bottle mouth outside the yellow area, most of the bottle body inside the yellow area, label facing up"
+  language_instruction: 'Pick up a bottle from the cluttered daily chemical bottles, transfer it to the other hand, and place it in the specified pose with the label facing up in the yellow area. Requirements: bottle mouth outside the yellow area, most of the bottle body inside the yellow area, label facing up'
 
   # 数据配置
   data:
@@ -18,25 +18,22 @@ task:
     repoid: 'lerobot/task3_placement'
     episodes_to_use: [0, 199]
 
-  # 训练配置
+  # 训练配置（方案A：单任务专用模型）
   training:
-    max_epoch: 30  # 任务3最复杂，需要更多epochs
+    max_epoch: 200 # 单任务训练，增加到200个epochs充分学习
 
-    # Stage 3: 从任务2的最佳checkpoint继续
-    # 格式: outputs/train/{task}/{method}/run_{timestamp}/best
-    # 需要手动指定任务2的timestamp！
-    resume_from: 'task'
-    resume_task_id: 2
-    resume_path: 'outputs/train/task2_weighing/smolvla_sequential/run_XXXXXX_XXXXXX/best'  # 修改XXXXXX为实际timestamp
+    # 方案A：从HuggingFace预训练开始（独立训练，不依赖任务2）
+    resume_from: 'pretrained'
+    pretrained_path: 'lerobot/smolvla_base' # 使用预训练模型
 
-    # 进一步降低学习率
+    # 优化器配置（方案A：单任务可以使用更高学习率）
     policy:
-      optimizer_lr: 0.00003  # 进一步降低至0.00003，精细调整
-      scheduler_warmup_steps: 500   # 短暂适应即可
-      scheduler_decay_steps: 25000
+      optimizer_lr: 0.00012 # 提高学习率（0.00003→0.00012），单任务专用优化
+      scheduler_warmup_steps: 3000 # 标准warmup步数
+      scheduler_decay_steps: 50000 # 更长decay，配合更多epochs
 
-  # Replay配置
-  replay:
-    task1_episodes: 20  # 10% 任务1
-    task2_episodes: 40  # 20% 任务2
-    # 任务3占70%（由训练脚本自动计算）
+
+  # Replay配置（方案A：不使用replay，单任务专用）
+  # replay:
+  #   task1_episodes: 0  # 不混合其他任务数据
+  #   task2_episodes: 0

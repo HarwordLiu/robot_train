@@ -21,17 +21,17 @@ task:
     repoid: 'lerobot/task1_moving_grasp'
     episodes_to_use: [0, 199] # 使用1000个episodes
 
-  # 训练配置
+  # 训练配置（方案A：单任务专用模型）
   training:
-    max_epoch: 150 # 增加到150个epochs，让模型学习更多细节
+    max_epoch: 200 # 单任务训练可以更多epochs（150→200），充分学习
 
-    # Stage 1: 从HuggingFace预训练SmolVLA开始
+    # 从HuggingFace预训练SmolVLA开始（单任务独立训练）
     resume_from: 'pretrained'
     pretrained_path: 'lerobot/smolvla_base' # 使用镜像源下载的预训练模型
 
-    # 优化器配置（方案A保守优化 + batch_size 64调整）
+    # 优化器配置（方案A：更高学习率用于单任务优化）
     policy:
-      optimizer_lr: 0.00009 # 配合batch_size=64调整（原0.0001，因batch增大略降）
-      scheduler_warmup_steps: 3000 # 更长warmup，训练更稳定
-      scheduler_decay_steps: 40000 # 更长decay
-# 任务1没有replay配置（因为是第一个任务）
+      optimizer_lr: 0.00012 # 提高学习率（0.00009→0.00012），单任务可以更激进
+      scheduler_warmup_steps: 3000 # 保持warmup步数
+      scheduler_decay_steps: 50000 # 更长decay（40000→50000），配合更多epochs
+# 任务1没有replay配置（方案A：单任务专用模型）
