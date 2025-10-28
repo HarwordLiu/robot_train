@@ -923,7 +923,7 @@ def main(cfg: DictConfig):
         writer.add_scalar("train/lr", lr_scheduler.get_last_lr()[0], epoch)
 
         # 多任务验证
-        if (epoch + 1) % cfg.training.validation_freq_epoch == 0:
+        if (epoch + 1) % cfg.training.validation_freq_epoch == 0 and cfg.training.get('validate_all_previous_tasks', False):
             cfg_root = Path(__file__).parent.parent / "configs/policy"
             validation_results = validate_all_tasks(
                 policy, cfg, task_id, device, cfg_root, dataset_fps)
