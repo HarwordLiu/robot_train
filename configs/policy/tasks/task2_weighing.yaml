@@ -7,10 +7,10 @@ task:
   stage: 2 # Stage 2: 从任务1模型继续
 
   # 任务描述（中文）
-  description: '机器人从移动的传送带上拾取快递袋，先放置在电子秤上完成称重，随后再次拾起并放入指定收纳筐中'
+  description: '机器人从移动的传送带上抓取快递袋，精确放置在电子秤的中心位置并调整朝向以完成称重。然后再次拾起快递袋，将其精确放置在指定收纳筐的中心位置并调整最终朝向。'
 
   # Language Instruction（英文）
-  language_instruction: 'Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container'
+  language_instruction: 'Grasp the package from the moving conveyor belt and place it precisely at the center of the electronic scale with correct orientation for weighing. Then grasp it again and place it precisely at the center of the designated storage container with correct final orientation.'
 
   # 数据配置
   data:

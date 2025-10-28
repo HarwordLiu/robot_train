@@ -7,12 +7,12 @@ task:
   stage: 1 # Stage 1: 从预训练模型开始
 
   # 任务描述（中文）
-  description: '机器人从移动的传送带上抓取物体，放置于桌面第一个目标位置后，再将其拿起至第二个目标位置'
+  description: '机器人从移动的传送带上抓取物体。将物体精确放置在桌面上第一个彩色目标块的中心位置，确保物体中心与目标中心对齐。然后再次抓取物体，并将其精确放置在桌面上第二个彩色目标块的中心位置。'
 
   # Language Instruction（英文，SmolVLA使用）
   # 这个instruction会在每个batch中作为任务条件输入模型
   # 优化版本：明确描述目标位置的特征
-  language_instruction: 'Grasp the object from the moving conveyor belt using visual guidance. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table, maintaining visual alignment throughout the placement.'
+  language_instruction: 'Grasp the object from the moving conveyor belt. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table.'
 
   # 数据配置
   data:

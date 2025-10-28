@@ -7,10 +7,10 @@ task:
   stage: 3 # Stage 3: 从任务2模型继续
 
   # 任务描述（中文）
-  description: '机器人从杂乱摆放的日化瓶中随机拾取一瓶，传递至另一只手后，再按照指定姿态将其摆放在目标位置。瓶身摆放要求：瓶口位于黄色区域外部；瓶身大部分位于黄色区域内部；瓶身标签面朝上'
+  description: '机器人需要对三个日化瓶进行翻面定姿摆放。依次拾取两个标签朝下的瓶子，翻转后精确放置在各自的目标位置，确保标签朝向正确；再拾取一个标签朝上的瓶子，调整后精确放置并确保标签朝向正确。所有瓶子需满足：瓶口位于黄色区域外部，瓶身大部分位于黄色区域内部，标签面朝上。'
 
   # Language Instruction（英文）
-  language_instruction: 'Pick up a bottle from the cluttered daily chemical bottles, transfer it to the other hand, and place it in the specified pose with the label facing up in the yellow area. Requirements: bottle mouth outside the yellow area, most of the bottle body inside the yellow area, label facing up'
+  language_instruction: 'Flip and place three daily chemical bottles with precise position and orientation control. First grasp two bottles with labels facing down, flip them and place at their target positions with labels facing up correctly. Then grasp one bottle with label facing up, adjust and place at target position with correct label orientation. All bottles must satisfy: bottle mouth outside the yellow area, most of the bottle body inside the yellow area, label facing up.'
 
   # 数据配置
   data:
