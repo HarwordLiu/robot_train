@@ -17,10 +17,9 @@ which_arm: both # Which arm: left, right, both
 head_init: [0, 0.209] # Robot head initial position
 
 # Input images: must match training configuration
-# SmolVLA typically uses head camera + depth
-input_images:
-  ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
-depth_range: [0, 1000] # Depth image clipping range (mm)
+# SmolVLA uses pure RGB approach (depth not natively supported)
+input_images: ['head_cam_h', 'wrist_cam_l', 'wrist_cam_r']
+# depth_range: [0, 1000] # Depth image clipping range (mm) - Not used in RGB-only mode
 image_size: [480, 640] # Original ROS topic image size
 target_image_size: [512, 512] # SmolVLA requires 512x512 (NOT 224x224!)
 ros_rate: 10 # Inference frequency (Hz)
@@ -85,7 +84,7 @@ epoch: 10 # Test epoch 10 model (loss ~0.02)
 # Change this based on which task you're evaluating
 
 # Task 1: Moving target grasping
-language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
+language_instruction: 'Grasp the object from the moving conveyor belt using visual guidance. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table, maintaining visual alignment throughout the placement.'
 
 # Task 2: Package weighing (uncomment to use)
 # language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
@@ -127,8 +126,10 @@ env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
 
 # ==================== SmolVLA Specific Notes ====================
 # 1. Image size MUST be 512x512 (SmolVLA requirement)
-# 2. Policy outputs 50-frame action chunks, but only first step is executed
-# 3. Action dimension is 32D, but only first 16D are used for Kuavo control
-# 4. Language instruction is REQUIRED for SmolVLA inference
-# 5. To evaluate different tasks, change both 'task' and 'language_instruction'
-# 6. Model path format: outputs/train/smolvla_sequential/task{N}_{name}/best
+# 2. RGB-only configuration (3 cameras): head_cam_h, wrist_cam_l, wrist_cam_r
+# 3. Policy outputs 50-frame action chunks, but only first step is executed
+# 4. Action dimension is 32D, but only first 16D are used for Kuavo control
+# 5. Language instruction is REQUIRED for SmolVLA inference
+# 6. To evaluate different tasks, change both 'task' and 'language_instruction'
+# 7. Model path format: outputs/train/smolvla_sequential/task{N}_{name}/best
+# 8. Depth images are not used as SmolVLA's SigLIP encoder only supports RGB
