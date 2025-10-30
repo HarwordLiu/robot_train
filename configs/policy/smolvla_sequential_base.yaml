@@ -43,15 +43,15 @@ policy:
   # Kuavo的16维数据会在数据加载时自动填充到32维（后16维填0）
   max_state_dim: 32 # 使用预训练模型的32维状态空间
   max_action_dim: 32 # 使用预训练模型的32维动作空间
-  chunk_size: 100 # 从50增加到75，更长动作序列帮助精确放置
-  n_action_steps: 10 # 从8增加到10，每次执行更多步
 
   # 图像预处理配置
   resize_imgs_with_padding: [512, 512] # SmolVLA标准输入尺寸
   empty_cameras: 0 # 不使用空相机占位
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
-  num_steps: 15 # 从10增加到15，生成更精确的动作
+  num_steps: 50 # 从10增加到50，生成更精确的动作
+  chunk_size: 20 # 从50增加到75，更长动作序列帮助精确放置
+  n_action_steps: 6 # 从8增加到10，每次执行更多步
 
   # 归一化配置
   normalization_mapping:
