@@ -87,7 +87,7 @@ training:
   target_action_dim: 32 # 目标动作维度（与预训练模型一致）
 
   # 数据加载
-  batch_size: 64 # 从32增加到64，更稳定的梯度更新
+  batch_size: 32 # 更稳定的梯度更新
   num_workers: 14 # 保持不变
   drop_last: True # 保证每个batch大小一致，避免BN层统计偏差
 
