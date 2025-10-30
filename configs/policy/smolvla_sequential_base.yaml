@@ -36,7 +36,7 @@ policy:
   train_state_proj: True # 训练state投影层
 
   # 观测配置
-  n_obs_steps: 1 # 使用当前帧（SmolVLA标准）
+  n_obs_steps: 4 # 使用当前帧（SmolVLA标准）
 
   # 动作空间配置（Kuavo双臂16关节机器人）
   # 注意：为了使用SmolVLA预训练权重，state/action维度必须与预训练模型一致（32维）
