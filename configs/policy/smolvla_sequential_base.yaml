@@ -31,12 +31,13 @@ policy:
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
-  freeze_vision_encoder: True # 冻结SigLIP视觉编码器
-  train_expert_only: True # 只训练Action Expert
+  freeze_vision_encoder: False # 不完全冻结视觉编码器
+  unfreeze_vision_layers: 2 # 解冻视觉编码器的最后2层（用于精细几何适配）
+  train_expert_only: False # 训练所有模块（单任务场景）
   train_state_proj: True # 训练state投影层
 
   # 观测配置
-  n_obs_steps: 4 # 使用当前帧（SmolVLA标准）
+  n_obs_steps: 6 # 增加时序上下文（4→6），提升精准放置的稳定性
 
   # 动作空间配置（Kuavo双臂16关节机器人）
   # 注意：为了使用SmolVLA预训练权重，state/action维度必须与预训练模型一致（32维）
@@ -49,9 +50,9 @@ policy:
   empty_cameras: 0 # 不使用空相机占位
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
-  num_steps: 50 # 从10增加到50，生成更精确的动作
-  chunk_size: 20 # 从50增加到75，更长动作序列帮助精确放置
-  n_action_steps: 6 # 从8增加到10，每次执行更多步
+  num_steps: 60 # 提高采样精度（50→60），生成更精确的动作
+  chunk_size: 30 # 增加chunk长度（20→30），更长动作序列帮助精确放置
+  n_action_steps: 6 # 每次执行6步
 
   # 归一化配置
   normalization_mapping:

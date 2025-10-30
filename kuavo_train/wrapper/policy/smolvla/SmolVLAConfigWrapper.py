@@ -32,6 +32,9 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
     确保可以使用 lerobot 的标准保存方式，无需依赖 omegaconf。
     """
 
+    # Kuavo特定配置：精细控制视觉编码器冻结
+    unfreeze_vision_layers: int = 0  # 解冻视觉编码器的最后N层（0表示全部冻结或全部解冻）
+
     def _convert_omegaconf_to_native(self):
         """
         将配置中所有 OmegaConf 对象转换为原生 Python 对象
@@ -59,9 +62,9 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         """
         将字典格式的 features 转换为 PolicyFeature 对象
 
-        当 OmegaConf 配置被转换为原生 Python 对象后，input_features 和 output_features 
+        当 OmegaConf 配置被转换为原生 Python 对象后，input_features 和 output_features
         会变成字典，需要重新转换为 PolicyFeature 对象以供策略模型使用。
-        
+
         重要：确保使用 custom_patches 中的 FeatureType，以支持 DEPTH 和 RGB 类型。
 
         Args:
@@ -71,7 +74,7 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
             包含 PolicyFeature 对象的字典
         """
         from lerobot_patches.custom_patches import FeatureType as CustomFeatureType
-        
+
         if not isinstance(d, dict):
             return d
 
@@ -106,9 +109,11 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         # 第二步：重新将 features 转换为 PolicyFeature 对象
         # 这是必要的，因为 _convert_omegaconf_to_native 会将它们转换为字典
         if hasattr(self, 'input_features') and self.input_features is not None:
-            self.input_features = self._normalize_feature_dict(self.input_features)
+            self.input_features = self._normalize_feature_dict(
+                self.input_features)
         if hasattr(self, 'output_features') and self.output_features is not None:
-            self.output_features = self._normalize_feature_dict(self.output_features)
+            self.output_features = self._normalize_feature_dict(
+                self.output_features)
 
         # 第三步：调用父类的后初始化
         super().__post_init__()
@@ -116,16 +121,21 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         # 注意：为了使用SmolVLA预训练权重，max_action_dim和max_state_dim应该为32（与预训练模型一致）
         # Kuavo实际是16维，数据会在加载时自动填充到32维
         if self.max_action_dim == 32 and self.max_state_dim == 32:
-            print("✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
+            print(
+                "✅ Using SmolVLA pretrained dimensions (32D). Kuavo 16D data will be auto-padded.")
         elif self.max_action_dim != 32 or self.max_state_dim != 32:
-            print(f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
-            print(f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
+            print(
+                f"⚠️  Warning: max_action_dim={self.max_action_dim}, max_state_dim={self.max_state_dim}")
+            print(
+                f"   For pretrained SmolVLA, both should be 32. Current config may not load pretrained weights.")
 
         # 打印SmolVLA配置摘要
         print(f"📋 SmolVLA Config Summary (Kuavo):")
         print(f"   - VLM Model: {self.vlm_model_name}")
-        print(f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
-        print(f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
+        print(
+            f"   - Max Action Dim: {self.max_action_dim} (Kuavo actual: 16, auto-padded)")
+        print(
+            f"   - Max State Dim: {self.max_state_dim} (Kuavo actual: 16, auto-padded)")
         print(f"   - Chunk Size: {self.chunk_size}")
         print(f"   - Action Steps: {self.n_action_steps}")
         print(f"   - Freeze Vision: {self.freeze_vision_encoder}")
@@ -175,17 +185,17 @@ class SmolVLAConfigWrapper(SmolVLAConfig):
         从预训练路径加载配置
 
         这个方法调用父类的 from_pretrained，确保正确处理配置文件中的 type 字段。
-        
+
         Args:
             pretrained_name_or_path: 预训练模型路径或 HuggingFace 模型 ID
             其他参数同 PreTrainedConfig.from_pretrained
-            
+
         Returns:
             加载的配置对象
         """
         # 调用父类 PreTrainedConfig 的 from_pretrained，触发 Choice 机制识别子类
         parent_cls = PreTrainedConfig
-        
+
         return parent_cls.from_pretrained(
             pretrained_name_or_path,
             force_download=force_download,

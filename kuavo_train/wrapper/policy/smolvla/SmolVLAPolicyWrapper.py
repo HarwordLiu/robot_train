@@ -46,6 +46,10 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         # 调用父类SmolVLAPolicy的初始化
         super().__init__(config, dataset_stats)
 
+        # Kuavo特定：精细控制视觉编码器冻结
+        if hasattr(config, 'unfreeze_vision_layers') and config.unfreeze_vision_layers > 0:
+            self._apply_partial_vision_freeze(config.unfreeze_vision_layers)
+
         # Kuavo项目特定日志
         print("\n" + "="*70)
         print("🤖 SmolVLA Policy Initialized for Kuavo Project")
@@ -55,6 +59,9 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         print(f"Chunk Size: {config.chunk_size}")
         print(f"Action Steps per Inference: {config.n_action_steps}")
         print(f"Freeze Vision Encoder: {config.freeze_vision_encoder}")
+        if hasattr(config, 'unfreeze_vision_layers') and config.unfreeze_vision_layers > 0:
+            print(
+                f"Unfreeze Vision Layers: Last {config.unfreeze_vision_layers} layers")
         print(f"Train Expert Only: {config.train_expert_only}")
 
         # 打印模型参数量
@@ -66,6 +73,63 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         print(f"  Trainable: {trainable_params:,}")
         print(f"  Frozen: {total_params - trainable_params:,}")
         print("="*70 + "\n")
+
+    def _apply_partial_vision_freeze(self, unfreeze_last_n_layers: int):
+        """
+        精细控制视觉编码器冻结：只解冻最后N层
+
+        这对于精准放置任务很有帮助，因为：
+        1. 保留预训练的低层特征（边缘、纹理等通用视觉特征）
+        2. 允许高层特征适配任务特定的几何信息（如彩色块中心对齐）
+
+        Args:
+            unfreeze_last_n_layers: 解冻视觉编码器的最后N层
+        """
+        try:
+            # 获取视觉模型（SigLIP）
+            vision_model = self.model.get_vlm_model().vision_model
+
+            # 获取视觉编码器的所有层
+            if hasattr(vision_model, 'encoder') and hasattr(vision_model.encoder, 'layers'):
+                vision_layers = vision_model.encoder.layers
+                total_layers = len(vision_layers)
+
+                if unfreeze_last_n_layers >= total_layers:
+                    print(
+                        f"⚠️  Warning: unfreeze_vision_layers={unfreeze_last_n_layers} >= total layers={total_layers}")
+                    print(f"   Will unfreeze all vision layers")
+                    unfreeze_last_n_layers = total_layers
+
+                # 首先确保整个视觉模型是可训练的（撤销父类的冻结）
+                for param in vision_model.parameters():
+                    param.requires_grad = True
+
+                # 然后冻结前面的层
+                freeze_until_layer = total_layers - unfreeze_last_n_layers
+                for layer_idx in range(freeze_until_layer):
+                    for param in vision_layers[layer_idx].parameters():
+                        param.requires_grad = False
+
+                print(f"✅ Vision Encoder Partial Freeze Applied:")
+                print(f"   Total layers: {total_layers}")
+                print(
+                    f"   Frozen layers: 0-{freeze_until_layer-1} ({freeze_until_layer} layers)")
+                print(
+                    f"   Trainable layers: {freeze_until_layer}-{total_layers-1} ({unfreeze_last_n_layers} layers)")
+
+                # 统计视觉编码器的参数
+                vision_total = sum(p.numel()
+                                   for p in vision_model.parameters())
+                vision_trainable = sum(
+                    p.numel() for p in vision_model.parameters() if p.requires_grad)
+                print(
+                    f"   Vision params: {vision_trainable:,} / {vision_total:,} trainable ({100*vision_trainable/vision_total:.1f}%)")
+            else:
+                print(
+                    f"⚠️  Warning: Could not find vision encoder layers. Skipping partial freeze.")
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to apply partial vision freeze: {e}")
+            print(f"   Falling back to default freeze behavior")
 
     def prepare_batch_with_language(
         self,
@@ -144,20 +208,20 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
 
         # 调用父类select_action
         return super().select_action(batch, noise)
-    
+
     def _get_action_chunk(self, batch: dict[str, torch.Tensor], noise: torch.Tensor | None = None) -> torch.Tensor:
         """
         重写父类方法以修复维度不匹配问题
-        
+
         正确的顺序：
         1. 模型预测（输出32D归一化的动作）
         2. 用32D参数反归一化
         3. 裁剪到16D（Kuavo实际维度）
-        
+
         父类的实现顺序错误（先裁剪再反归一化），导致维度不匹配。
         """
         from lerobot.constants import ACTION
-        
+
         # Copy queues so that we don't modify the originals
         for k in batch:
             if k in self._queues and k != ACTION:
@@ -169,70 +233,71 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         lang_tokens, lang_masks = self.prepare_language(batch)
 
         # 模型采样（输出32D归一化的动作）
-        actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
-        
+        actions = self.model.sample_actions(
+            images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+
         # 先在32D空间反归一化（使用32D的mean/std）
         actions = self.unnormalize_outputs({ACTION: actions})[ACTION]
-        
+
         # 然后裁剪到原始维度（16D）
         original_action_dim = self.config.action_feature.shape[0]
         actions = actions[:, :, :original_action_dim]
-        
+
         if self.config.adapt_to_pi_aloha:
             actions = self._pi_aloha_encode_actions(actions)
-        
+
         return actions
 
     @staticmethod
     def _create_identity_stats(config: SmolVLAConfig) -> Dict[str, Dict[str, torch.Tensor]]:
         """
         创建"空"的dataset_stats，使归一化成为恒等变换
-        
+
         对于每个feature：
         - mean = 0（减去0不改变数据）
         - std = 1（除以1不改变数据）
-        
+
         注意：对于 state 和 action，使用 max_state_dim 和 max_action_dim（32维）
         而不是实际的维度（16维），以匹配训练时的填充维度。
-        
+
         Args:
             config: SmolVLA配置对象
-            
+
         Returns:
             包含所有features的identity stats字典
         """
         stats = {}
-        
+
         # 处理input features（observations）
         for key, feature in config.input_features.items():
             shape = feature.shape
-            
+
             # 对于state，使用max_state_dim而不是实际维度
             if 'state' in key.lower():
                 shape = (config.max_state_dim,)
-            
+
             stats[key] = {
                 'mean': torch.zeros(shape, dtype=torch.float32),
                 'std': torch.ones(shape, dtype=torch.float32),
                 'min': torch.zeros(shape, dtype=torch.float32),
                 'max': torch.ones(shape, dtype=torch.float32),
             }
-        
+
         # 处理output features（actions）
         for key, feature in config.output_features.items():
             shape = feature.shape
-            
+
             # 对于action，使用max_action_dim而不是实际维度
             if 'action' in key.lower():
                 shape = (config.max_action_dim,)
-            
+
             stats[key] = {
                 'mean': torch.zeros(shape, dtype=torch.float32),
                 'std': torch.ones(shape, dtype=torch.float32),
                 'min': torch.zeros(shape, dtype=torch.float32),
                 'max': torch.ones(shape, dtype=torch.float32),
             }
-        
+
         return stats
 
     @classmethod
@@ -269,7 +334,8 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         # 如果没有提供dataset_stats，创建临时的identity stats用于初始化
         # 真实的归一化参数会从checkpoint中加载
         if dataset_stats is None:
-            print("⚠️  No dataset_stats provided. Will load normalization params from checkpoint.")
+            print(
+                "⚠️  No dataset_stats provided. Will load normalization params from checkpoint.")
             dataset_stats = cls._create_identity_stats(config)
 
         # 创建模型实例
@@ -284,25 +350,33 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
                 # 加载完整的 state_dict（包括归一化参数）
                 from safetensors.torch import load_file
                 full_state_dict = load_file(str(model_file))
-                
+
                 # 分离归一化参数和模型参数
-                norm_keys = ("normalize_inputs", "normalize_targets", "unnormalize_outputs")
-                norm_state_dict = {k: v for k, v in full_state_dict.items() if k.startswith(norm_keys)}
-                model_state_dict = {k: v for k, v in full_state_dict.items() if not k.startswith(norm_keys)}
-                
+                norm_keys = ("normalize_inputs",
+                             "normalize_targets", "unnormalize_outputs")
+                norm_state_dict = {
+                    k: v for k, v in full_state_dict.items() if k.startswith(norm_keys)}
+                model_state_dict = {
+                    k: v for k, v in full_state_dict.items() if not k.startswith(norm_keys)}
+
                 # 先加载模型参数（不包括归一化）
-                missing, unexpected = model.load_state_dict(model_state_dict, strict=False)
+                missing, unexpected = model.load_state_dict(
+                    model_state_dict, strict=False)
                 print(f"✅ Loaded model weights from local checkpoint")
-                
+
                 # 再加载归一化参数（如果存在）
                 if norm_state_dict:
                     model.load_state_dict(norm_state_dict, strict=False)
                     print(f"✅ Loaded normalization parameters from checkpoint")
-                    print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_inputs' in k])} input norm params")
-                    print(f"   - {len([k for k in norm_state_dict.keys() if 'normalize_targets' in k])} target norm params")
-                    print(f"   - {len([k for k in norm_state_dict.keys() if 'unnormalize_outputs' in k])} unnorm params")
+                    print(
+                        f"   - {len([k for k in norm_state_dict.keys() if 'normalize_inputs' in k])} input norm params")
+                    print(
+                        f"   - {len([k for k in norm_state_dict.keys() if 'normalize_targets' in k])} target norm params")
+                    print(
+                        f"   - {len([k for k in norm_state_dict.keys() if 'unnormalize_outputs' in k])} unnorm params")
                 else:
-                    print(f"⚠️  No normalization parameters found in checkpoint. Using identity normalization.")
+                    print(
+                        f"⚠️  No normalization parameters found in checkpoint. Using identity normalization.")
             else:
                 print(f"⚠️  Model file not found: {model_file}")
         else:

@@ -29,9 +29,9 @@ task:
     resume_from: 'pretrained'
     pretrained_path: 'lerobot/smolvla_base' # 使用镜像源下载的预训练模型
 
-    # 优化器配置（方案A：更高学习率用于单任务优化）
+    # 优化器配置（解冻视觉层后需要更保守的学习率）
     policy:
-      optimizer_lr: 0.00012 # 提高学习率（0.00009→0.00012），单任务可以更激进
-      scheduler_warmup_steps: 3000 # 保持warmup步数
-      scheduler_decay_steps: 50000 # 更长decay（40000→50000），配合更多epochs
+      optimizer_lr: 0.00005 # 降低学习率（0.00012→0.00005），解冻视觉层后更稳定
+      scheduler_warmup_steps: 5000 # 增加warmup（3000→5000），避免早期发散
+      scheduler_decay_steps: 60000 # 更长decay（50000→60000），配合更多epochs
 # 任务1没有replay配置（方案A：单任务专用模型）
