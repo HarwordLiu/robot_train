@@ -143,12 +143,13 @@ def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.dev
 
     policy.eval()
     policy.to(device)
-    
+
     # ⚡ Apply inference optimization: reduce sampling steps
     if num_inference_steps is not None:
         original_steps = policy.config.num_steps
         policy.config.num_steps = num_inference_steps
-        log_model.info(f"⚡ Inference Optimization: Sampling steps {original_steps} → {num_inference_steps}")
+        log_model.info(
+            f"⚡ Inference Optimization: Sampling steps {original_steps} → {num_inference_steps}")
         speedup = original_steps / num_inference_steps
         log_model.info(f"   Expected speedup: ~{speedup:.1f}x faster")
 
@@ -231,9 +232,14 @@ def main(config_path: str, env: gym.Env):
     eval_episodes = cfg.eval_episodes
     device = torch.device(cfg.device)
     language_instruction = cfg.language_instruction
-    
-    # Read inference optimization config
-    num_inference_steps = cfg.get('num_inference_steps', None)
+
+    # Read inference optimization config (use full_cfg to get additional fields)
+    num_inference_steps = full_cfg.get('num_inference_steps', None)
+    if num_inference_steps is not None:
+        log_model.info(
+            f"📝 Config: num_inference_steps = {num_inference_steps}")
+    else:
+        log_model.info("📝 Config: num_inference_steps not set, using default")
 
     # Set random seed
     set_seed(cfg.seed)
@@ -243,7 +249,7 @@ def main(config_path: str, env: gym.Env):
 
     # Load SmolVLA policy with optimization
     policy = setup_smolvla_policy(
-        pretrained_path, language_instruction, device, 
+        pretrained_path, language_instruction, device,
         num_inference_steps=num_inference_steps)
 
     # Inference loop
