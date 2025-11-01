@@ -116,7 +116,7 @@ def depth_preprocess(depth, device="cpu", depth_range=[0, 1000]):
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device, non_blocking=True)
 
 
-def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.device("cuda"), warmup_iterations=2):
+def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.device("cuda"), warmup_iterations=2, num_inference_steps=None):
     """
     Setup and load SmolVLA policy model
 
@@ -125,6 +125,7 @@ def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.dev
         language_instruction: Task language instruction
         device: Device
         warmup_iterations: Number of warmup inference iterations (default: 2)
+        num_inference_steps: Override Flow Matching sampling steps (None = use default)
 
     Returns:
         Loaded policy model
@@ -142,6 +143,15 @@ def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.dev
 
     policy.eval()
     policy.to(device)
+    
+    # ⚡ Apply inference optimization: reduce sampling steps
+    if num_inference_steps is not None:
+        original_steps = policy.config.num_steps
+        policy.config.num_steps = num_inference_steps
+        log_model.info(f"⚡ Inference Optimization: Sampling steps {original_steps} → {num_inference_steps}")
+        speedup = original_steps / num_inference_steps
+        log_model.info(f"   Expected speedup: ~{speedup:.1f}x faster")
+
     policy.reset()
 
     # Log model info
@@ -154,6 +164,7 @@ def setup_smolvla_policy(pretrained_path, language_instruction, device=torch.dev
         f"📊 Action dim: {policy.config.max_action_dim} (Kuavo uses first 16)")
     log_model.info(f"📊 Chunk size: {policy.config.chunk_size}")
     log_model.info(f"📊 Action steps: {policy.config.n_action_steps}")
+    log_model.info(f"📊 Sampling steps: {policy.config.num_steps}")
 
     # Warmup inference to initialize CUDA kernels and reduce first inference latency
     if warmup_iterations > 0:
@@ -220,6 +231,9 @@ def main(config_path: str, env: gym.Env):
     eval_episodes = cfg.eval_episodes
     device = torch.device(cfg.device)
     language_instruction = cfg.language_instruction
+    
+    # Read inference optimization config
+    num_inference_steps = cfg.get('num_inference_steps', None)
 
     # Set random seed
     set_seed(cfg.seed)
@@ -227,9 +241,10 @@ def main(config_path: str, env: gym.Env):
     # Build model path
     pretrained_path = f"outputs/train/{cfg.task}/{cfg.method}/{cfg.timestamp}/epoch{cfg.epoch}"
 
-    # Load SmolVLA policy
+    # Load SmolVLA policy with optimization
     policy = setup_smolvla_policy(
-        pretrained_path, language_instruction, device)
+        pretrained_path, language_instruction, device, 
+        num_inference_steps=num_inference_steps)
 
     # Inference loop
     results = []
@@ -351,9 +366,9 @@ def main(config_path: str, env: gym.Env):
 # Compatibility interface
 
 
-def setup_policy(pretrained_path, policy_type, device=torch.device("cuda"), language_instruction=""):
+def setup_policy(pretrained_path, policy_type, device=torch.device("cuda"), language_instruction="", num_inference_steps=None):
     """Compatibility interface"""
     if policy_type != 'smolvla':
         raise ValueError(
             f"This script only supports 'smolvla' policy, got '{policy_type}'")
-    return setup_smolvla_policy(pretrained_path, language_instruction, device)
+    return setup_smolvla_policy(pretrained_path, language_instruction, device, num_inference_steps=num_inference_steps)

@@ -124,6 +124,10 @@ tasks_to_evaluate:
 max_episode_steps: 500 # Maximum episode steps
 env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
 
+# ==================== Inference Optimization ====================
+# Reduce sampling steps for faster inference
+num_inference_steps: 20  # Default is 60, recommended: 20-30 for 3x speedup
+
 # ==================== SmolVLA Specific Notes ====================
 # 1. Image size MUST be 512x512 (SmolVLA requirement)
 # 2. RGB-only configuration (3 cameras): head_cam_h, wrist_cam_l, wrist_cam_r
@@ -133,3 +137,4 @@ env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
 # 6. To evaluate different tasks, change both 'task' and 'language_instruction'
 # 7. Model path format: outputs/train/smolvla_sequential/task{N}_{name}/best
 # 8. Depth images are not used as SmolVLA's SigLIP encoder only supports RGB
+# 9. num_inference_steps controls Flow Matching sampling steps (lower = faster, but may reduce quality)
