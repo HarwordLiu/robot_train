@@ -207,13 +207,15 @@ def depth_preprocess(depth, device="cpu", target_size=None, crop_size=448):
     return torch.tensor(depth, dtype=torch.float32).unsqueeze(0).to(device, non_blocking=True)
 
 
-def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
+def setup_policy(pretrained_path, policy_type, device=torch.device("cuda"), num_inference_steps=None):
     """
     Set up and load the policy model.
 
     Args:
         pretrained_path: Path to the checkpoint
         policy_type: Type of policy ('diffusion', 'act', 'hierarchical_diffusion', or 'vla_transformer')
+        device: Device to load the model on
+        num_inference_steps: Number of sampling steps for SmolVLA (optional, for inference optimization)
 
     Returns:
         Loaded policy model and device
@@ -248,12 +250,23 @@ def setup_policy(pretrained_path, policy_type, device=torch.device("cuda")):
         log_model.info("🤖 Loading SmolVLA Policy...")
         policy = SmolVLAPolicyWrapper.from_pretrained(
             Path(pretrained_path), strict=True)
+
+        # Apply inference optimization: reduce sampling steps
+        if num_inference_steps is not None:
+            original_steps = policy.config.num_steps
+            policy.config.num_steps = num_inference_steps
+            log_model.info(
+                f"⚡ 推理优化: 采样步数 {original_steps} → {num_inference_steps}")
+            speedup = original_steps / num_inference_steps
+            log_model.info(f"   预期加速: ~{speedup:.1f}x 更快")
+
         # Log SmolVLA specific info
         log_model.info(f"📊 VLM Model: {policy.config.vlm_model_name}")
         log_model.info(f"📊 Action chunk size: {policy.config.chunk_size}")
         log_model.info(f"📊 Max action dim: {policy.config.max_action_dim}")
         log_model.info(
             f"📊 Vision encoder frozen: {policy.config.freeze_vision_encoder}")
+        log_model.info(f"📊 采样步数: {policy.config.num_steps}")
     else:
         raise ValueError(
             f"Unsupported policy type: {policy_type}. Supported: 'diffusion', 'act', 'hierarchical_diffusion', 'vla_transformer', 'smolvla'")
@@ -397,6 +410,9 @@ def check_rostopics(task):
 def main(config_path: str, episode: int):
     # load config
     cfg = load_inference_config(config_path)
+    # Load full config to get additional fields like num_inference_steps
+    full_cfg = OmegaConf.load(config_path)
+
     use_delta = cfg.use_delta
     # eval_episodes = cfg.eval_episodes
     seed = cfg.seed
@@ -407,6 +423,13 @@ def main(config_path: str, episode: int):
     timestamp = cfg.timestamp
     epoch = cfg.epoch
     env_name = cfg.env_name
+
+    # Read inference optimization config for SmolVLA
+    num_inference_steps = full_cfg.get('num_inference_steps', None)
+    if num_inference_steps is not None:
+        log_model.info(f"📝 配置: num_inference_steps = {num_inference_steps}")
+    else:
+        log_model.info("📝 配置: num_inference_steps 未设置，使用默认值")
 
     # 获取目标图像尺寸（用于模型输入）
     target_image_size = None
@@ -442,7 +465,8 @@ def main(config_path: str, episode: int):
         language_instruction = cfg.language_instruction
         log_model.info(f"🗣️ Language instruction: {language_instruction}")
 
-    policy = setup_policy(pretrained_path, policy_type, device)
+    policy = setup_policy(pretrained_path, policy_type,
+                          device, num_inference_steps=num_inference_steps)
 
     # Initialize evaluation environment to render two observation types:
     # an image of the scene and state/position of the agent.
