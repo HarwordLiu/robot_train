@@ -129,7 +129,7 @@ tasks_to_evaluate:
     episodes: 10
 
 # ==================== Environment Configuration ====================
-max_episode_steps: 500 # Maximum episode steps
+max_episode_steps: 300 # Maximum episode steps
 env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
 
 # ==================== Inference Optimization ====================
