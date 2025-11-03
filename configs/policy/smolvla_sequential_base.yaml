@@ -59,8 +59,8 @@ policy:
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
   num_steps: 60 # 提高采样精度（50→60），生成更精确的动作
-  chunk_size: 30 # 增加chunk长度（20→30），更长动作序列帮助精确放置
-  n_action_steps: 6 # 每次执行6步
+  chunk_size: 40 # 增加chunk长度（20→30），更长动作序列帮助精确放置
+  n_action_steps: 10 # 每次执行6步
 
   # 归一化配置
   normalization_mapping:
