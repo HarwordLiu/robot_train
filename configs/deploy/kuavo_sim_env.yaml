@@ -68,7 +68,7 @@ go_bag_path: /your_bag_path # Provide full bag path for inference
 
 policy_type: 'smolvla' # SmolVLA sequential policy
 use_delta: false # Delta action (not supported yet)
-eval_episodes: 50 # Number of evaluation episodes
+eval_episodes: 100 # Number of evaluation episodes
 seed: 42 # Random seed
 start_seed: 42 # Episode start seed
 device: 'cuda' # or "cpu"
