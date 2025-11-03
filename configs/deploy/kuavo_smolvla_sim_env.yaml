@@ -76,8 +76,8 @@ device: 'cuda' # or "cpu"
 #   - task4_sorting: Full process sorting
 task: 'task1_moving_grasp'
 method: 'smolvla_sequential'
-timestamp: 'run_20251014_112525' # Your actual training timestamp
-epoch: 10 # Test epoch 10 model (loss ~0.02)
+timestamp: 'run_20251030_121742' # Your actual training timestamp
+epoch: 45 # Test epoch 10 model (loss ~0.02)
 
 # ==================== Language Instruction Configuration ====================
 # SmolVLA uses language instructions to condition the policy
@@ -126,7 +126,7 @@ env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
 
 # ==================== Inference Optimization ====================
 # Reduce sampling steps for faster inference
-num_inference_steps: 20 # Default is 60, recommended: 20-30 for 3x speedup
+num_inference_steps: 30 # Default is 60, recommended: 20-30 for 3x speedup
 
 # ==================== SmolVLA Specific Notes ====================
 # 1. Image size MUST be 512x512 (SmolVLA requirement)
