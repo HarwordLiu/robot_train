@@ -71,8 +71,7 @@ def load_inference_config(config_path: str = None) -> Config_Inference:
             # Optional field
             config_dict['target_image_size']) if 'target_image_size' in config_dict else None,
         language_instruction=config_dict.get(
-            'language_instruction', None),  # Optional field for VLA models
-        hf_endpoint=hf_endpoint  # Optional field for HuggingFace mirror
+            'language_instruction', None)  # Optional field for VLA models
     )
 
 

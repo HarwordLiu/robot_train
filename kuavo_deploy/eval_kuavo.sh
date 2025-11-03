@@ -63,7 +63,7 @@ start_interactive_controller() {
     echo "  l/log      - 查看实时日志"
     echo "  h/help     - 显示帮助"
     echo ""
-    
+
     while true; do
         # 检查任务是否还在运行
         if [ -n "$current_pid" ] && kill -0 "$current_pid" 2>/dev/null; then
@@ -73,9 +73,9 @@ start_interactive_controller() {
             current_pid=""
             break
         fi
-        
+
         read -r cmd
-        
+
         case $cmd in
             p|pause)
                 if [ -n "$current_pid" ] && kill -0 "$current_pid" 2>/dev/null; then
@@ -225,7 +225,7 @@ case $help_choice in
         if [ -f "$config_path" ]; then
             echo "📁 配置文件路径: $config_path"
             echo "🔍 正在解析配置文件..."
-            
+
             # 使用Python解析YAML并提取model path相关参数
             python3 -c "
 import yaml
@@ -234,28 +234,28 @@ import sys
 try:
     with open('$config_path', 'r') as f:
         config = yaml.safe_load(f)
-    
+
     task = config.get('task', 'N/A')
     method = config.get('method', 'N/A')
     timestamp = config.get('timestamp', 'N/A')
     epoch = config.get('epoch', 'N/A')
-    
+
     model_path = f'outputs/train/{task}/{method}/{timestamp}/epoch{epoch}'
-    
+
     print(f'📋 模型配置信息:')
     print(f'   Task: {task}')
     print(f'   Method: {method}')
     print(f'   Timestamp: {timestamp}')
     print(f'   Epoch: {epoch}')
     print(f'📂 完整模型路径: {model_path}')
-    
+
     # 检查模型路径是否存在
     import os
     if os.path.exists(model_path):
         print(f'✅ 模型路径存在')
     else:
         print(f'❌ 模型路径不存在')
-        
+
 except Exception as e:
     print(f'❌ 解析配置文件失败: {e}')
     sys.exit(1)
@@ -267,7 +267,7 @@ except Exception as e:
 
         # 初始化进程ID变量
         current_pid=""
-        
+
         # 进入for循环
         while true; do
             echo "可选择要执行的示例如下:"
@@ -293,7 +293,7 @@ except Exception as e:
 
             case $choice in
                 1)
-                    echo "执行: python $SCRIPT --task go --dry_run --config $config_path" 
+                    echo "执行: python $SCRIPT --task go --dry_run --config $config_path"
                     python "$SCRIPT" --task go --dry_run --config "$config_path" > $LOG_DIR/kuavo_deploy.log 2>&1
                     ;;
                 2)
@@ -335,7 +335,7 @@ except Exception as e:
                     current_pid=$!
                     echo "任务已启动，PID: $current_pid"
                     start_interactive_controller
-                    ;;  
+                    ;;
                 7)
                     echo "执行: python $SCRIPT --task go --verbose --config $config_path"
                     echo "任务将在后台运行，启动交互式控制器..."
