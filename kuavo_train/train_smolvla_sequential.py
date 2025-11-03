@@ -707,12 +707,16 @@ def main(cfg: DictConfig):
 
     # 设置 HuggingFace 镜像源以提高下载速度
     import os
-    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-    os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
 
-    # 可选：设置其他镜像源
-    # os.environ['HF_ENDPOINT'] = 'https://huggingface.co'  # 官方源
-    # os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'   # 中国镜像源
+    # 从配置读取 HF endpoint，如果没有配置则使用默认镜像源
+    hf_endpoint = cfg.get('hf_endpoint', 'https://hf-mirror.com')
+    if hf_endpoint:
+        os.environ['HF_ENDPOINT'] = hf_endpoint
+        print(f"✅ 已设置 HuggingFace 下载源: {hf_endpoint}")
+    else:
+        print("ℹ️  使用默认 HuggingFace Hub: https://huggingface.co")
+
+    os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
 
     logger = setup_logging()
     set_seed(cfg.training.seed)

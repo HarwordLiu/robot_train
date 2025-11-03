@@ -1,26 +1,18 @@
 hydra: # Hydra 配置文件保存目录，仅供参数检查使用
   run:
-    dir: ./outputs/kuavo_real_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S} # 单次运行目录
+    dir: ./outputs/kuavo_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S} # 单次运行目录
   sweep:
-    dir: ./outputs/kuavo_real_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
+    dir: ./outputs/kuavo_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
     subdir: ${hydra:job.override_dirname}
 
-# ==================== HuggingFace Configuration ====================
-# Set HuggingFace download mirror (optional)
-# If not set, uses default HuggingFace Hub (https://huggingface.co)
-# Common mirrors:
-#   - China mirror: https://hf-mirror.com
-#   - Leave commented out to use default
-hf_endpoint: 'https://hf-mirror.com' # Uncomment and modify if needed
-
-# env config，真机运行配置文件
-real: true # 是否使用真实机器人，default=false
+# env config，仿真器运行配置文件
+real: false # 是否使用真实机器人，仿真环境为false
 
 only_arm: true # 默认true, 是否只使用手臂数据, 目前的模仿学习只用于手臂数据，选择true会自动屏蔽足关节数据
-eef_type: qiangnao # 末端执行器类型: 仿真选择：rq2f85, 真机可选：leju_claw, qiangnao
+eef_type: rq2f85 # 末端执行器类型: 仿真选择：rq2f85, 真机可选：leju_claw, qiangnao
 control_mode: joint # or eef（暂未支持）
-which_arm: right # 需要哪一只手臂的数据，可选: left, right, both，注意这会同时选择对应手臂的相机，已默认包含头部相机
-head_init: null # 机器人头部初始位置，default=None
+which_arm: both # 需要哪一只手臂的数据，可选: left, right, both，注意这会同时选择对应手臂的相机，已默认包含头部相机
+head_init: [0, 0.209] # 机器人头部初始位置，仿真请默认使用这个值，保持观测统一
 
 # input_images：输入图像，可选"head_cam_h",'depth_h','wrist_cam_l','depth_l','wrist_cam_r','depth_r'
 # (每个都是可选，需要与你的机器人配置、训练模型一致)
@@ -32,9 +24,10 @@ head_init: null # 机器人头部初始位置，default=None
 #                 "right":['head_cam_h','depth_h','wrist_cam_r','depth_r'],
 #                 "both":['head_cam_h','depth_h','wrist_cam_l','depth_l','wrist_cam_r','depth_r']
 #                 }][int(self.use_depth)][self.which_arm]
-input_images: ['head_cam_h', 'wrist_cam_r']
+input_images:
+  ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
 depth_range: [0, 1000] # 深度图的裁剪范围，单位：毫米，没有深度图时不起作用
-image_size: [480, 848] # 图像大小（高，宽），default=(480, 640)
+image_size: [480, 640] # 图像大小（高，宽），default=(480, 640)
 ros_rate: 10 # 推理频率，单位Hz
 
 # 以下环境配置为不建议改动配置
@@ -80,18 +73,18 @@ eef_max: [1] # 末端执行器最大角度
 is_binary: false # 是否使用二值化夹爪，灵巧手，default=false
 
 # inference config，模型推理配置的修改
-go_bag_path: /your_bag_path # 推理时需要提供bag包的完整路径，如：到达预抓取姿态等，可直接拷贝一个训练用rosbag控制
+go_bag_path: /your_bag_path # 推理时需要提供bag包的完整路径，如：到达预抓取姿态等，可直接拷贝一个训练用rosbag控制。仿真器中可不用
 
 policy_type: 'diffusion' # 策略名字，支持diffusion，act等
 use_delta: false # 是否使用增量动作，default=false（暂未支持）
-eval_episodes: 1 # 测试回合数，真机默认为1
-seed: 42 # 随机种子，真机中仅模型状态可固定，
-start_seed: 42 # 回合开始时的随机种子，真机中仅模型状态可固定
+eval_episodes: 100 # 测试回合数，仿真默认为100，用于打分
+seed: 42 # 随机种子，仿真中可用于固定各物体初始状态，便于复现
+start_seed: 42 # 回合开始时的随机种子，仿真中可用于固定各物体初始状态，便于复现
 device: 'cuda' # or "cpu"
-task: 'your_task'
-method: 'your_method'
-timestamp: 'your_timestamp'
-epoch: 10 # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
-max_episode_steps: 500 # 最大回合步数，超过自动结束
-env_name: Kuavo-Real # kuavo真机环境名称
+task: 'task_300_episodes'
+method: 'diffusion_bs64_usedepth_nofuse'
+timestamp: 'run_20251011_112255'
+epoch: 100 # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
+max_episode_steps: 500 # 最大回合步数，超过自动结束，根据任务所需时长调整
+env_name: Kuavo-Sim # kuavo仿真器环境名称
 

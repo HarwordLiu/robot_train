@@ -1,53 +1,44 @@
-hydra: # Hydra 配置文件保存目录，仅供参数检查使用
+hydra: # Hydra configuration directory
   run:
-    dir: ./outputs/kuavo_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S} # 单次运行目录
+    dir: ./outputs/kuavo_smolvla_sim_deploy_hydra_save/singlerun/${now:%Y%m%d_%H%M%S}
   sweep:
-    dir: ./outputs/kuavo_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
+    dir: ./outputs/kuavo_smolvla_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S}
     subdir: ${hydra:job.override_dirname}
 
-# env config，仿真器运行配置文件
-real: false # 是否使用真实机器人，仿真环境为false
+# ==================== SmolVLA Simulation Environment Configuration ====================
+# This config is for deploying SmolVLA sequential multi-task models in simulation
 
-only_arm: true # 默认true, 是否只使用手臂数据, 目前的模仿学习只用于手臂数据，选择true会自动屏蔽足关节数据
-eef_type: rq2f85 # 末端执行器类型: 仿真选择：rq2f85, 真机可选：leju_claw, qiangnao
-control_mode: joint # or eef（暂未支持）
-which_arm: both # 需要哪一只手臂的数据，可选: left, right, both，注意这会同时选择对应手臂的相机，已默认包含头部相机
-head_init: [0, 0.209] # 机器人头部初始位置，仿真请默认使用这个值，保持观测统一
+# ==================== HuggingFace Configuration ====================
+# Set HuggingFace download mirror (optional)
+# If not set, uses default HuggingFace Hub (https://huggingface.co)
+# Common mirrors:
+#   - China mirror: https://hf-mirror.com
+#   - Leave commented out to use default
+hf_endpoint: 'https://hf-mirror.com' # Uncomment and modify if needed
 
-# input_images：输入图像，可选"head_cam_h",'depth_h','wrist_cam_l','depth_l','wrist_cam_r','depth_r'
-# (每个都是可选，需要与你的机器人配置、训练模型一致)
-# 通常：cameras = [{"left":['head_cam_h','wrist_cam_l'],
-#                 "right":['head_cam_h','wrist_cam_r'],
-#                 "both":['head_cam_h','wrist_cam_l','wrist_cam_r']
-#                 },
-#                 {"left":['head_cam_h','depth_h','wrist_cam_l','depth_l'],
-#                 "right":['head_cam_h','depth_h','wrist_cam_r','depth_r'],
-#                 "both":['head_cam_h','depth_h','wrist_cam_l','depth_l','wrist_cam_r','depth_r']
-#                 }][int(self.use_depth)][self.which_arm]
-input_images:
-  ['head_cam_h', 'depth_h', 'wrist_cam_l', 'depth_l', 'wrist_cam_r', 'depth_r']
-depth_range: [0, 1000] # 深度图的裁剪范围，单位：毫米，没有深度图时不起作用
-image_size: [480, 640] # 图像大小（高，宽），default=(480, 640)
-ros_rate: 10 # 推理频率，单位Hz
+# Environment config
+real: false # Simulation environment
+only_arm: true # Only use arm data
+eef_type: rq2f85 # End-effector type: rq2f85 for simulation
+control_mode: joint # Joint control mode
+which_arm: both # Which arm: left, right, both
+head_init: [0, 0.209] # Robot head initial position
 
-# 以下环境配置为不建议改动配置
+# Input images: must match training configuration
+# SmolVLA uses pure RGB approach (depth not natively supported)
+input_images: ['head_cam_h', 'wrist_cam_l', 'wrist_cam_r']
+# depth_range: [0, 1000] # Depth image clipping range (mm) - Not used in RGB-only mode
+image_size: [480, 640] # Original ROS topic image size
+target_image_size: [512, 512] # SmolVLA requires 512x512 (NOT 224x224!)
+ros_rate: 10 # Inference frequency (Hz)
 
-# qiangnao_dof_needed是强脑手需要的自由度数目。强脑灵巧手有6个自由度。标准握拳状态[100] * 6, 张开状态[0] * 6。
-# 1: 不需要精细操作或者多指协同操作时，通常为设置为1，表示只需要第一个关节作为开合依据,此时需要用[0, 100, 0, 0, 0, 0]表示张开状态, [100] * 6表示握拳状态。
-# 2(暂未测试): 或者设置为2，目前的手柄遥操作只有两个自由度。0,2,3,4,5自由度绑定为1个自由度。
-# 6(暂未测试): 如果脱离手柄使用手指灵巧操作，可以设置为6，表示需要所有6个自由度。
-qiangnao_dof_needed: 1 # default=1
+# End-effector DOF configuration
+qiangnao_dof_needed: 1
+leju_claw_dof_needed: 1
+rq2f85_dof_needed: 1
 
-# leju_claw_dof_needed是夹爪需要的自由度数目。夹爪有1个自由度。仿真中，标准夹紧状态[0], 张开状态[-100]。
-leju_claw_dof_needed: 1 # default=1
-
-# rq2f85_dof_needed是夹抓rq2f85需要的自由度数目。
-rq2f85_dof_needed: 1 # default=1
-
-arm_init: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # 手臂初始位置，default=0
-# arm_min: [-180, -40, -90, -150, -90, -75, -40, -180, -40, -90, -150, -90, -75, -40] # 手臂最小角度
-# arm_max: [90, 120, 90, 0, 90, 40, 40, 90, 120, 90, 0, 90, 40, 40] # 手臂最大角度
-
+# Arm initialization and limits
+arm_init: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] # Arm initial position
 arm_min:
   [
     -180,
@@ -67,24 +58,91 @@ arm_min:
   ]
 arm_max: [180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180]
 
-eef_min: [0] # 末端执行器最小角度
-eef_max: [1] # 末端执行器最大角度
+eef_min: [0]
+eef_max: [1]
 
-is_binary: false # 是否使用二值化夹爪，灵巧手，default=false
+is_binary: false
 
-# inference config，模型推理配置的修改
-go_bag_path: /your_bag_path # 推理时需要提供bag包的完整路径，如：到达预抓取姿态等，可直接拷贝一个训练用rosbag控制。仿真器中可不用
+# ==================== SmolVLA Inference Configuration ====================
+go_bag_path: /your_bag_path # Provide full bag path for inference
 
-policy_type: 'diffusion' # 策略名字，支持diffusion，act等
-use_delta: false # 是否使用增量动作，default=false（暂未支持）
-eval_episodes: 100 # 测试回合数，仿真默认为100，用于打分
-seed: 42 # 随机种子，仿真中可用于固定各物体初始状态，便于复现
-start_seed: 42 # 回合开始时的随机种子，仿真中可用于固定各物体初始状态，便于复现
+policy_type: 'smolvla' # SmolVLA sequential policy
+use_delta: false # Delta action (not supported yet)
+eval_episodes: 50 # Number of evaluation episodes
+seed: 42 # Random seed
+start_seed: 42 # Episode start seed
 device: 'cuda' # or "cpu"
-task: 'task_300_episodes'
-method: 'diffusion_bs64_usedepth_nofuse'
-timestamp: 'run_20251011_112255'
-epoch: 100 # 使用训练保存的哪一个epoch。注意：代码将在outputs/<task>/<method>/run_<timestamp>/epoch10中load policy的模型参数
-max_episode_steps: 500 # 最大回合步数，超过自动结束，根据任务所需时长调整
-env_name: Kuavo-Sim # kuavo仿真器环境名称
 
+# ==================== Model Path Configuration ====================
+# Points to SmolVLA sequential training outputs
+
+# Task selection: Change this to evaluate different tasks
+# Options:
+#   - task1_moving_grasp: Moving target grasping from conveyor belt
+#   - task2_weighing: Package weighing
+#   - task3_placement: Daily chemical product placement
+#   - task4_sorting: Full process sorting
+task: 'task1_moving_grasp'
+method: 'smolvla_sequential'
+timestamp: 'run_20251030_121742' # Your actual training timestamp
+epoch: 45 # Test epoch 10 model (loss ~0.02)
+
+# ==================== Language Instruction Configuration ====================
+# SmolVLA uses language instructions to condition the policy
+# Change this based on which task you're evaluating
+
+# Task 1: Moving target grasping
+language_instruction: 'Grasp the object from the moving conveyor belt using visual guidance. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table, maintaining visual alignment throughout the placement.'
+
+# Task 2: Package weighing (uncomment to use)
+# language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+
+# Task 3: Product placement (uncomment to use)
+# language_instruction: "Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up"
+
+# Task 4: Full process sorting (uncomment to use)
+# language_instruction: "Move from the starting position, pick up the workpiece, move to the designated location and place it precisely"
+
+# ==================== Multi-Task Evaluation Configuration ====================
+# For evaluating all 4 tasks sequentially, use this configuration
+
+# Enable multi-task evaluation (optional)
+multi_task_eval: false # Set to true to evaluate all tasks
+
+# If multi_task_eval is true, define tasks to evaluate
+tasks_to_evaluate:
+  - task_id: 1
+    task_name: 'task1_moving_grasp'
+    language_instruction: 'Pick up the moving object from the conveyor belt, place it on the table, and push it to the designated area'
+    episodes: 10
+  - task_id: 2
+    task_name: 'task2_weighing'
+    language_instruction: 'Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container'
+    episodes: 10
+  - task_id: 3
+    task_name: 'task3_placement'
+    language_instruction: 'Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up'
+    episodes: 10
+  - task_id: 4
+    task_name: 'task4_sorting'
+    language_instruction: 'Move from the starting position, pick up the workpiece, move to the designated location and place it precisely'
+    episodes: 10
+
+# ==================== Environment Configuration ====================
+max_episode_steps: 500 # Maximum episode steps
+env_name: Kuavo-Sim # Kuavo SmolVLA simulation environment name
+
+# ==================== Inference Optimization ====================
+# Reduce sampling steps for faster inference
+num_inference_steps: 30 # Default is 60, recommended: 20-30 for 3x speedup
+
+# ==================== SmolVLA Specific Notes ====================
+# 1. Image size MUST be 512x512 (SmolVLA requirement)
+# 2. RGB-only configuration (3 cameras): head_cam_h, wrist_cam_l, wrist_cam_r
+# 3. Policy outputs 50-frame action chunks, but only first step is executed
+# 4. Action dimension is 32D, but only first 16D are used for Kuavo control
+# 5. Language instruction is REQUIRED for SmolVLA inference
+# 6. To evaluate different tasks, change both 'task' and 'language_instruction'
+# 7. Model path format: outputs/train/smolvla_sequential/task{N}_{name}/best
+# 8. Depth images are not used as SmolVLA's SigLIP encoder only supports RGB
+# 9. num_inference_steps controls Flow Matching sampling steps (lower = faster, but may reduce quality)

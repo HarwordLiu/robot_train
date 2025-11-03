@@ -5,6 +5,14 @@ hydra: # Hydra 配置文件保存目录，仅供参数检查使用
     dir: ./outputs/kuavo_hierarchical_sim_deploy_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
     subdir: ${hydra:job.override_dirname}
 
+# ==================== HuggingFace Configuration ====================
+# Set HuggingFace download mirror (optional)
+# If not set, uses default HuggingFace Hub (https://huggingface.co)
+# Common mirrors:
+#   - China mirror: https://hf-mirror.com
+#   - Leave commented out to use default
+hf_endpoint: 'https://hf-mirror.com' # Uncomment and modify if needed
+
 # env config，分层架构仿真器运行配置文件
 real: false # 是否使用真实机器人，仿真环境为false
 

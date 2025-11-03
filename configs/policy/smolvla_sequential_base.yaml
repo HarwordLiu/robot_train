@@ -16,6 +16,14 @@ hydra:
 timestamp: ${now:%Y%m%d_%H%M%S}
 method: 'smolvla_sequential'
 
+# ==================== HuggingFace Configuration ====================
+# Set HuggingFace download mirror (optional)
+# If not set, uses default HuggingFace Hub (https://huggingface.co)
+# Common mirrors:
+#   - China mirror: https://hf-mirror.com
+#   - Leave commented out or set to null to use default
+hf_endpoint: 'https://hf-mirror.com' # Set to null to use default HuggingFace Hub
+
 # 任务配置字段（Hydra会从task config中读取）
 # 格式: task1_moving_grasp, task2_weighing, task3_placement, task4_sorting
 task: 'task1_moving_grasp' # 默认任务1，会被任务配置覆盖
