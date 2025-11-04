@@ -87,7 +87,9 @@ class SmolVLAPolicyWrapper(SmolVLAPolicy):
         """
         try:
             # 获取视觉模型（SigLIP）
-            vision_model = self.model.get_vlm_model().vision_model
+            # VLAFlowMatching 持有的 VLM 位于 self.model.vlm_with_expert
+            # 正确访问路径：vlm_with_expert.get_vlm_model().vision_model
+            vision_model = self.model.vlm_with_expert.get_vlm_model().vision_model
 
             # 获取视觉编码器的所有层
             if hasattr(vision_model, 'encoder') and hasattr(vision_model.encoder, 'layers'):
