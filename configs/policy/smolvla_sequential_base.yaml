@@ -39,7 +39,7 @@ policy:
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
-  freeze_vision_encoder: True # 不完全冻结视觉编码器
+  freeze_vision_encoder: False # 不完全冻结视觉编码器
   unfreeze_vision_layers: 2 # 不解冻视觉编码器
   train_expert_only: False # 训练所有模块（单任务场景）
   train_state_proj: True # 训练state投影层
