@@ -40,7 +40,7 @@ policy:
 
   # 冻结策略（防止灾难性遗忘的关键）
   freeze_vision_encoder: False # 不完全冻结视觉编码器
-  unfreeze_vision_layers: 4 # 解冻视觉编码器的最后4层
+  unfreeze_vision_layers: 0 # 不解冻视觉编码器
   train_expert_only: False # 训练所有模块（单任务场景）
   train_state_proj: True # 训练state投影层
 
