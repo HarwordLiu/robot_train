@@ -16,10 +16,11 @@ task:
 
   # 数据配置
   data:
-    root: '/root/robot/data/task-1/1-2000/lerobot/'
+    # root: '/root/robot/data/task-1/1-2000/lerobot/'
     # root: '/mnt/e/robot/data/data/task1/lerobot/1-400/'
+    root: '/root/robot/data/task1/data/lerobot/1201-1600'
     repoid: 'lerobot/task1_moving_grasp'
-    episodes_to_use: [0, 499] # 使用1000个episodes
+    episodes_to_use: [0, 399] # 使用1000个episodes
 
   # 训练配置（方案A：单任务专用模型）
   training:
