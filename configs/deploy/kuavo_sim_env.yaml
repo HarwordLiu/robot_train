@@ -84,18 +84,18 @@ device: 'cuda' # or "cpu"
 #   - task4_sorting: Full process sorting
 task: 'task1_moving_grasp'
 method: 'smolvla_sequential'
-timestamp: 'run_20251030_121742' # Your actual training timestamp
-epoch: 45 # Test epoch 10 model (loss ~0.02)
+timestamp: 'run_20251104_082205' # Your actual training timestamp
+epoch: 18 # Test epoch 10 model (loss ~0.02)
 
 # ==================== Language Instruction Configuration ====================
 # SmolVLA uses language instructions to condition the policy
 # Change this based on which task you're evaluating
 
 # Task 1: Moving target grasping
-language_instruction: 'Grasp the object from the moving conveyor belt using visual guidance. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table, maintaining visual alignment throughout the placement.'
+# language_instruction: 'Grasp the object from the moving conveyor belt using visual guidance. Place it precisely at the center of the first colored target block on the table, ensuring the object center aligns with the target center. Then grasp it again and place it precisely at the center of the second colored target block on the table, maintaining visual alignment throughout the placement.'
 
 # Task 2: Package weighing (uncomment to use)
-# language_instruction: "Pick up the package from the conveyor belt, weigh it on the electronic scale, then pick it up again and place it in the designated storage container"
+language_instruction:  'Grasp the package from the moving conveyor belt and place it precisely at the center of the electronic scale with correct orientation for weighing. Then grasp it again and place it precisely at the center of the designated storage container with correct final orientation.'
 
 # Task 3: Product placement (uncomment to use)
 # language_instruction: "Pick up the daily chemical product bottle, transfer it to the other hand, and place it in the designated location with the label facing up"
