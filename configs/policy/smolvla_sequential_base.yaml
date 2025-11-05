@@ -45,7 +45,7 @@ policy:
   train_state_proj: True # 训练state投影层
 
   # 观测配置
-  n_obs_steps: 6 # 增加时序上下文（4→6），提升精准放置的稳定性
+  n_obs_steps: 8 # 增加时序上下文（6→8），帮助模型理解动作序列的阶段
 
   # 动作空间配置（Kuavo双臂16关节机器人）
   # 注意：为了使用SmolVLA预训练权重，state/action维度必须与预训练模型一致（32维）
@@ -59,8 +59,8 @@ policy:
 
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
   num_steps: 60 # 提高采样精度（50→60），生成更精确的动作
-  chunk_size: 40 # 增加chunk长度（20→30），更长动作序列帮助精确放置
-  n_action_steps: 10 # 每次执行6步
+  chunk_size: 20 # 减小chunk长度（40→20），增加视觉反馈频率，更闭环
+  n_action_steps: 5 # 每次执行5步，更频繁地重新观测和规划
 
   # 归一化配置
   normalization_mapping:
