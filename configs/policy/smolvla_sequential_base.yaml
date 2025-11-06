@@ -73,11 +73,10 @@ policy:
       _target_: lerobot.configs.types.NormalizationMode
       value: MEAN_STD
 
-  # 优化器基础配置（各任务会override学习率）
-  optimizer_betas: [0.9, 0.95]
+  optimizer_betas: [0.95, 0.999]
   optimizer_eps: 1.0e-08
-  optimizer_weight_decay: 1.0e-6 # VLM需要正则化防止过拟合
-  optimizer_grad_clip_norm: 1.0 # VLM embedding空间大，需要严格梯度控制
+  optimizer_weight_decay: 1.0e-6
+  optimizer_grad_clip_norm: 10
 
   # 学习率调度器配置（各任务会override）
   scheduler_warmup_steps: 3000 # 从1500增加到3000，训练更稳定
