@@ -73,14 +73,14 @@ policy:
       _target_: lerobot.configs.types.NormalizationMode
       value: MEAN_STD
 
-  optimizer_betas: [0.95, 0.999]
+  optimizer_betas: [0.9, 0.95]
   optimizer_eps: 1.0e-08
-  optimizer_weight_decay: 1.0e-6
+  optimizer_weight_decay: 1.0e-10
   optimizer_grad_clip_norm: 10
 
   # 学习率调度器配置（各任务会override）
-  scheduler_warmup_steps: 3000 # 从1500增加到3000，训练更稳定
-  scheduler_decay_steps: 40000 # 从20000增加到40000
+  scheduler_warmup_steps: 1000 # SmolVLA默认值
+  scheduler_decay_steps: 30000 # SmolVLA默认值
   scheduler_decay_lr: 2.5e-6
 
 # ==================== 训练基础配置 ====================
