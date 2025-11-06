@@ -96,13 +96,13 @@ training:
   # 数据加载
   batch_size: 64 # 更稳定的梯度更新
   # accumulation_steps: 2 # 等效64
-  num_workers: 10 # 保持不变
+  num_workers: 14 # 保持不变
   drop_last: True # 保证每个batch大小一致，避免BN层统计偏差
 
   use_amp: True # 使用混合精度训练
 
   # 日志和保存
-  save_freq_epoch: 3 # 每3个epoch保存一次checkpoint（方案A：更频繁保存）
+  save_freq_epoch: 5 # 每3个epoch保存一次checkpoint（方案A：更频繁保存）
   log_freq: 10
 
   # 多任务验证配置（防遗忘的关键）
