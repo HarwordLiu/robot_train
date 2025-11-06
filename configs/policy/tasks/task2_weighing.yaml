@@ -16,7 +16,7 @@ task:
   data:
     root: '/root/robot/data/task-2/1-2000/'
     repoid: 'lerobot/task2_weighing'
-    episodes_to_use: [0, 699]
+    episodes_to_use: [0, 299]
 
   # 训练配置（方案A：单任务专用模型）
   training:
@@ -28,9 +28,9 @@ task:
 
     # 优化器配置（方案A：单任务可以使用更高学习率）
     policy:
-      optimizer_lr: 0.00005 # 提高学习率（0.00005→0.00012），单任务专用优化
-      scheduler_warmup_steps: 5000 # 标准warmup步数
-      scheduler_decay_steps: 60000 # 更长decay，配合更多epochs
+      optimizer_lr: 0.00008 # 降低学习率（0.00012→0.00005），解冻视觉层后更稳定
+      scheduler_warmup_steps: 8000 # 增加warmup（3000→5000），避免早期发散
+      scheduler_decay_steps: 70000 # 更长decay（50000→60000），配合更多epochs
 
 
   # Replay配置（方案A：不使用replay，单任务专用）

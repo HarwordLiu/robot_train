@@ -39,8 +39,8 @@ policy:
   load_vlm_weights: True # 任务1从HuggingFace预训练开始
 
   # 冻结策略（防止灾难性遗忘的关键）
-  freeze_vision_encoder: False # 不完全冻结视觉编码器
-  unfreeze_vision_layers: 4 # 不解冻视觉编码器
+  freeze_vision_encoder: True # 不完全冻结视觉编码器
+  unfreeze_vision_layers: 0 # 不解冻视觉编码器
   train_expert_only: False # 训练所有模块（单任务场景）
   train_state_proj: True # 训练state投影层
 
@@ -60,7 +60,7 @@ policy:
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
   num_steps: 60 # 提高采样精度（50→60），生成更精确的动作
   chunk_size: 20 # 减小chunk长度（40→20），增加视觉反馈频率，更闭环
-  n_action_steps: 5 # 每次执行5步，更频繁地重新观测和规划
+  n_action_steps: 6 # 每次执行5步，更频繁地重新观测和规划
 
   # 归一化配置
   normalization_mapping:
