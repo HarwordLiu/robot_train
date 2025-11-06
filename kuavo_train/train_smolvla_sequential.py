@@ -585,7 +585,8 @@ def create_mixed_dataloader(
         pin_memory=(cfg.training.device != 'cpu'),
         drop_last=cfg.training.drop_last,
         collate_fn=collate_fn_with_padding,
-        prefetch_factor=1
+        prefetch_factor=2,
+        persistent_workers=True,
     )
 
 
