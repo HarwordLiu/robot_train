@@ -44,9 +44,6 @@ policy:
   train_expert_only: False # 训练所有模块（单任务场景）
   train_state_proj: True # 训练state投影层
 
-  # 观测配置
-  n_obs_steps: 6
-
   # 动作空间配置（Kuavo双臂16关节机器人）
   # 注意：为了使用SmolVLA预训练权重，state/action维度必须与预训练模型一致（32维）
   # Kuavo的16维数据会在数据加载时自动填充到32维（后16维填0）
@@ -57,10 +54,12 @@ policy:
   resize_imgs_with_padding: [512, 512] # SmolVLA标准输入尺寸
   empty_cameras: 0 # 不使用空相机占位
 
+  # 观测配置
+  n_obs_steps: 2
   # Flow Matching配置（SmolVLA使用Flow Matching而非Diffusion）
-  num_steps: 60 # 提高采样精度（50→60），生成更精确的动作
-  chunk_size: 20 # 减小chunk长度（40→20），增加视觉反馈频率，更闭环
-  n_action_steps: 6 # 每次执行5步，更频繁地重新观测和规划
+  num_steps: 20 # 提高采样精度（50→60），生成更精确的动作
+  chunk_size: 50 # 减小chunk长度（40→20），增加视觉反馈频率，更闭环
+  n_action_steps: 10 # 每次执行15步，更频繁地重新观测和规划
 
   # 归一化配置
   normalization_mapping:
