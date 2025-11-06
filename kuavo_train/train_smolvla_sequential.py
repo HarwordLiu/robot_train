@@ -41,7 +41,12 @@ from lerobot.configs.types import FeatureType
 from lerobot.utils.random_utils import set_seed
 from lerobot.datasets.utils import dataset_to_policy_features
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata, LeRobotDataset
+from kuavo_train.wrapper.dataset.SmolVLADatasetWrapper import (
+    SmolVLADatasetWrapper,
+    SmolVLAMixedDatasetWrapper
+)
 from tqdm import tqdm
+import time
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, ConcatDataset, WeightedRandomSampler
 import torch.nn as nn
@@ -340,6 +345,8 @@ def create_dataloader_with_language(
     """
     创建包含language instruction的DataLoader，并自动填充action/state维度
 
+    优化：使用SmolVLADatasetWrapper将数据增强和填充操作移到worker进程
+
     Args:
         dataset: LeRobot数据集
         language_instruction: 任务的language instruction
@@ -355,45 +362,24 @@ def create_dataloader_with_language(
     Returns:
         DataLoader
     """
+    # 使用优化的Dataset包装器（数据增强和填充在worker进程中执行）
+    wrapped_dataset = SmolVLADatasetWrapper(
+        dataset=dataset,
+        language_instruction=language_instruction,
+        target_action_dim=target_action_dim,
+        target_state_dim=target_state_dim,
+        use_augmentation=use_augmentation,
+        augmentation_prob=augmentation_prob,
+    )
 
-    # 创建数据增强器
-    augmenter = DeterministicAugmenterColor() if use_augmentation else None
-
+    # 简化的collate函数（只需要基本的batch collation）
     def collate_fn_with_language(batch):
-        """为batch添加language instruction并填充action/state维度"""
-        # 使用默认collate
+        """简化的collate函数，只做基本的batch collation"""
         from torch.utils.data._utils.collate import default_collate
-        batch_dict = default_collate(batch)
-
-        # 添加task字段
-        batch_size = batch_dict[list(batch_dict.keys())[0]].shape[0]
-        batch_dict['task'] = [language_instruction] * batch_size
-
-        # 数据增强（50%概率应用）
-        if augmenter is not None and random.random() < augmentation_prob:
-            augmenter.set_random_params()
-            for key in batch_dict.keys():
-                if 'image' in key.lower() and isinstance(batch_dict[key], torch.Tensor):
-                    # 应用图像增强
-                    batch_dict[key] = augmenter.apply_augment_sequence(
-                        batch_dict[key])
-
-        # 填充action和state维度（从Kuavo的16维到SmolVLA的32维）
-        for key in batch_dict.keys():
-            if isinstance(batch_dict[key], torch.Tensor):
-                if 'action' in key.lower():
-                    # 填充action维度
-                    batch_dict[key] = pad_tensor_to_target_dim(
-                        batch_dict[key], target_action_dim)
-                elif 'state' in key.lower() or 'observation.state' in key:
-                    # 填充state维度
-                    batch_dict[key] = pad_tensor_to_target_dim(
-                        batch_dict[key], target_state_dim)
-
-        return batch_dict
+        return default_collate(batch)
 
     return DataLoader(
-        dataset,
+        wrapped_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=True,
@@ -480,113 +466,73 @@ def create_mixed_dataloader(
         print(
             f"📦 Adding Task {replay_task_id} replay: {len(replay_dataset)} frames")
 
-    # 为每个数据集创建单独的dataloader，然后轮流采样
-    # 简化版本：直接concatenate datasets
-    # 注意：这里每个dataset都需要保留自己的language instruction
+    # 计算每个数据集的采样概率（基于replay weights）
+    stage_key = f"stage{task_id}_replay"
+    replay_config = cfg.sequential.get(stage_key, {})
 
-    class MixedDataset(torch.utils.data.Dataset):
-        """混合多个数据集，每个数据集保留自己的language instruction"""
+    weights = []
+    for i, (ds, _) in enumerate(all_datasets):
+        if i == 0:
+            # 当前任务的weight
+            task_key = f"task{task_id}"
+            weight = replay_config.get(task_key, 1.0)
+        else:
+            # Replay任务的weight
+            task_key = f"task{i}"  # i对应replay_task_id
+            weight = replay_config.get(task_key, 0.1)
+        weights.append(weight)
 
-        def __init__(self, datasets_with_language):
-            self.datasets_with_language = datasets_with_language
-            self.lengths = [len(ds) for ds, _ in datasets_with_language]
-            self.total_length = sum(self.lengths)
+    # 归一化weights
+    total_weight = sum(weights)
+    normalized_weights = [w / total_weight for w in weights]
 
-            # 计算每个数据集的采样概率（基于replay weights）
-            stage_key = f"stage{task_id}_replay"
-            replay_config = cfg.sequential.get(stage_key, {})
+    # 使用优化的MixedDataset包装器（数据增强和填充在worker进程中执行）
+    mixed_dataset_wrapper = SmolVLAMixedDatasetWrapper(
+        datasets_with_language=all_datasets,
+        weights=normalized_weights,
+        target_action_dim=cfg.policy.max_action_dim,
+        target_state_dim=cfg.policy.max_state_dim,
+        use_augmentation=True,
+        augmentation_prob=0.5,
+    )
 
-            self.weights = []
-            for i, (ds, _) in enumerate(datasets_with_language):
-                if i == 0:
-                    # 当前任务的weight
-                    task_key = f"task{task_id}"
-                    weight = replay_config.get(task_key, 1.0)
-                else:
-                    # Replay任务的weight
-                    task_key = f"task{i}"  # i对应replay_task_id
-                    weight = replay_config.get(task_key, 0.1)
-                self.weights.append(weight)
+    print(
+        f"📊 Mixed Dataset: {len(mixed_dataset_wrapper)} frames (with replay)")
+    print(f"   Weights: {mixed_dataset_wrapper.weights}")
 
-            # 归一化weights
-            total_weight = sum(self.weights)
-            self.weights = [w / total_weight for w in self.weights]
-
-        def __len__(self):
-            return self.total_length
-
-        def __getitem__(self, idx):
-            # 根据weights随机选择一个dataset
-            import random
-            dataset_idx = random.choices(
-                range(len(self.datasets_with_language)), weights=self.weights, k=1)[0]
-            dataset, language = self.datasets_with_language[dataset_idx]
-
-            # 从该dataset随机选择一个样本
-            sample_idx = random.randint(0, len(dataset) - 1)
-            sample = dataset[sample_idx]
-
-            # 添加language instruction
-            sample['task'] = language
-
-            return sample
-
-    mixed_dataset = MixedDataset(all_datasets)
-
-    print(f"📊 Mixed Dataset: {len(mixed_dataset)} frames (with replay)")
-    print(f"   Weights: {mixed_dataset.weights}")
-
-    # 创建数据增强器
-    augmenter = DeterministicAugmenterColor()
-
+    # 简化的collate函数（只需要基本的batch collation）
     def collate_fn_with_padding(batch):
-        """collate函数：处理mixed dataset的batch并填充维度"""
+        """简化的collate函数，只做基本的batch collation"""
         from torch.utils.data._utils.collate import default_collate
+        return default_collate(batch)
 
-        # batch中的每个sample已经有'task'字段了
-        # 先提取所有非'task'字段进行collate
-        tasks = [sample.pop('task') for sample in batch]
-
-        # 使用默认collate处理其他字段
-        batch_dict = default_collate(batch)
-
-        # 添加task字段回去
-        batch_dict['task'] = tasks
-
-        # 数据增强（50%概率应用）
-        if random.random() < 0.5:
-            augmenter.set_random_params()
-            for key in batch_dict.keys():
-                if 'image' in key.lower() and isinstance(batch_dict[key], torch.Tensor):
-                    # 应用图像增强
-                    batch_dict[key] = augmenter.apply_augment_sequence(
-                        batch_dict[key])
-
-        # 填充action和state维度
-        target_action_dim = cfg.policy.max_action_dim
-        target_state_dim = cfg.policy.max_state_dim
-
-        for key in batch_dict.keys():
-            if isinstance(batch_dict[key], torch.Tensor):
-                if 'action' in key.lower():
-                    batch_dict[key] = pad_tensor_to_target_dim(
-                        batch_dict[key], target_action_dim)
-                elif 'state' in key.lower() or 'observation.state' in key:
-                    batch_dict[key] = pad_tensor_to_target_dim(
-                        batch_dict[key], target_state_dim)
-
-        return batch_dict
+    # 优化DataLoader配置：
+    # 1. 增加prefetch_factor到2-4（提升预取效率）
+    # 2. 添加persistent_workers=True（避免每个epoch重新创建worker）
+    # 3. 根据CPU核心数动态调整num_workers（如果可用）
+    import os
+    max_workers = cfg.training.num_workers
+    try:
+        import multiprocessing
+        cpu_count = multiprocessing.cpu_count()
+        # 建议使用CPU核心数-1，但不超过配置的max_workers
+        suggested_workers = min(cpu_count - 1, max(max_workers, 20))
+        if suggested_workers > max_workers:
+            print(
+                f"💡 建议将num_workers从{max_workers}增加到{suggested_workers}以提升IO密集型任务性能")
+    except:
+        suggested_workers = max_workers
 
     return DataLoader(
-        mixed_dataset,
+        mixed_dataset_wrapper,
         batch_size=cfg.training.batch_size,
-        num_workers=cfg.training.num_workers,
+        num_workers=max_workers,
         shuffle=True,
         pin_memory=(cfg.training.device != 'cpu'),
         drop_last=cfg.training.drop_last,
         collate_fn=collate_fn_with_padding,
-        prefetch_factor=2,
-        persistent_workers=True,
+        prefetch_factor=2,  # 从1增加到2，提升预取效率
+        persistent_workers=True if max_workers > 0 else False,  # 添加persistent_workers
     )
 
 
@@ -874,6 +820,9 @@ def main(cfg: DictConfig):
 
     best_loss = float('inf')
 
+    # 性能监控：batch处理时间统计
+    batch_process_times = []
+
     for epoch in range(task_cfg.task.training.max_epoch):
         print(f"\n{'='*70}")
         print(f"Epoch {epoch + 1}/{task_cfg.task.training.max_epoch}")
@@ -884,6 +833,9 @@ def main(cfg: DictConfig):
         total_loss = 0.0
         num_batches = 0
 
+        # Epoch级别的性能统计
+        epoch_batch_process_time = 0.0
+
         epoch_bar = tqdm(
             dataloader,
             desc=f"Training Epoch {epoch+1}",
@@ -891,7 +843,10 @@ def main(cfg: DictConfig):
             leave=False
         )
 
-        for batch in epoch_bar:
+        for batch_idx, batch in enumerate(epoch_bar):
+            # 记录batch处理时间
+            batch_process_start = time.time()
+
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
                      for k, v in batch.items()}
 
@@ -912,21 +867,38 @@ def main(cfg: DictConfig):
             optimizer.zero_grad()
             lr_scheduler.step()
 
+            batch_process_time = time.time() - batch_process_start
+            epoch_batch_process_time += batch_process_time
+
             # Logging
             total_loss += loss.item()
             num_batches += 1
 
             epoch_bar.set_postfix(
                 loss=f"{loss.item():.4f}",
-                lr=f"{lr_scheduler.get_last_lr()[0]:.2e}"
+                lr=f"{lr_scheduler.get_last_lr()[0]:.2e}",
+                proc_ms=f"{batch_process_time*1000:.1f}"  # 处理时间（毫秒）
             )
 
         avg_loss = total_loss / num_batches
+        avg_batch_process_time = epoch_batch_process_time / num_batches
+
         print(f"Epoch {epoch+1} Average Loss: {avg_loss:.4f}")
+        print(f"📊 性能统计:")
+        print(f"   - 平均batch处理时间: {avg_batch_process_time*1000:.2f}ms/batch")
+        print(
+            f"   - 理论吞吐量: {cfg.training.batch_size / avg_batch_process_time:.1f} samples/s")
+
+        # 保存性能统计
+        batch_process_times.append(avg_batch_process_time)
 
         # TensorBoard logging
         writer.add_scalar("train/loss", avg_loss, epoch)
         writer.add_scalar("train/lr", lr_scheduler.get_last_lr()[0], epoch)
+        writer.add_scalar("performance/batch_process_time_ms",
+                          avg_batch_process_time * 1000, epoch)
+        writer.add_scalar("performance/throughput_samples_per_sec",
+                          cfg.training.batch_size / avg_batch_process_time, epoch)
 
         # 多任务验证
         if (epoch + 1) % cfg.training.validation_freq_epoch == 0 and cfg.training.get('validate_all_previous_tasks', False):
@@ -1003,6 +975,11 @@ def main(cfg: DictConfig):
 
     # 保存训练结果
     results_file = output_directory / "training_results.json"
+
+    # 计算平均性能统计
+    avg_batch_process_time = sum(
+        batch_process_times) / len(batch_process_times) if batch_process_times else 0
+
     with open(results_file, 'w') as f:
         json.dump({
             'task_id': task_id,
@@ -1013,6 +990,10 @@ def main(cfg: DictConfig):
             'final_validation': {str(k): v for k, v in final_results.items()},
             'training_epochs': task_cfg.task.training.max_epoch,
             'learning_rate': policy_cfg.optimizer_lr,
+            'performance': {
+                'avg_batch_process_time_ms': avg_batch_process_time * 1000,
+                'throughput_samples_per_sec': cfg.training.batch_size / avg_batch_process_time if avg_batch_process_time > 0 else 0,
+            }
         }, f, indent=2)
 
     print(f"\n{'='*70}")
