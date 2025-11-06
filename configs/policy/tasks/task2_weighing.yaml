@@ -16,7 +16,7 @@ task:
   data:
     root: '/root/robot/data/task-2/1-2000/'
     repoid: 'lerobot/task2_weighing'
-    episodes_to_use: [0, 199]
+    episodes_to_use: [0, 599]
 
   # 训练配置（方案A：单任务专用模型）
   training:
