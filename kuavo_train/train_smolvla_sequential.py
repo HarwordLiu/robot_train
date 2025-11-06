@@ -400,7 +400,8 @@ def create_dataloader_with_language(
         pin_memory=pin_memory,
         drop_last=drop_last,
         collate_fn=collate_fn_with_language,
-        prefetch_factor=1
+        prefetch_factor=2,
+        persistent_workers=True,
     )
 
 
