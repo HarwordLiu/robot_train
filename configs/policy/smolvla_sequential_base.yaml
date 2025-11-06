@@ -96,7 +96,7 @@ training:
   # 数据加载
   batch_size: 64 # 更稳定的梯度更新
   # accumulation_steps: 2 # 等效64
-  num_workers: 13
+  num_workers: 14
   drop_last: True # 保证每个batch大小一致，避免BN层统计偏差
 
   use_amp: True # 使用混合精度训练
