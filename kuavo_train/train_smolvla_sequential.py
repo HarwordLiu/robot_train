@@ -164,7 +164,7 @@ class ReplayDatasetManager:
                     # 加载任务配置
                     task_cfg = load_task_config(self.cfg_root, task_id)
 
-                    # 加载数据集（使用delta_timestamps和优化的视频后端）
+                    # 加载数据集（使用delta_timestamps，lerobot会自动选择最优视频后端）
                     dataset = LeRobotDataset(
                         task_cfg.task.data.repoid,
                         root=task_cfg.task.data.root,
@@ -172,9 +172,12 @@ class ReplayDatasetManager:
                             task_cfg.task.data.episodes_to_use[0],
                             task_cfg.task.data.episodes_to_use[1] + 1
                         )),
-                        delta_timestamps=delta_timestamps,
-                        video_backend=get_optimal_video_backend()  # 优化：使用最优视频后端
+                        delta_timestamps=delta_timestamps
+                        # 注意：不显式指定video_backend，lerobot会自动选择最优后端
                     )
+
+                    # 显示实际使用的视频后端
+                    print(f"    📹 Video backend: {dataset.video_backend}")
 
                     self.replay_datasets[task_id] = dataset
                     self.replay_weights[task_id] = weight
@@ -303,13 +306,9 @@ def pad_dataset_stats(dataset_stats: Dict[str, Dict],
 
 def get_optimal_video_backend():
     """
-    获取最优的视频解码后端
+    获取最优的视频解码后端（已废弃，lerobot会自动选择）
 
-    优先使用torchcodec（如果可用），因为它可以精确定位到目标帧，比pyav快得多。
-    如果torchcodec不可用，fallback到pyav。
-
-    Returns:
-        str: 视频后端名称 ("torchcodec" 或 "pyav")
+    保留此函数仅用于显示提示信息，实际后端由lerobot自动选择。
     """
     try:
         import importlib.util
@@ -347,8 +346,8 @@ def create_lerobot_dataset_with_deltas(
         repo_id,
         root=root,
         episodes=episodes,
-        delta_timestamps=delta_timestamps,
-        video_backend=get_optimal_video_backend()  # 优化：使用最优视频后端
+        delta_timestamps=delta_timestamps
+        # 注意：不显式指定video_backend，lerobot会自动选择最优后端（torchcodec如果可用）
     )
 
 
@@ -448,15 +447,7 @@ def create_mixed_dataloader(
     print(
         f"   - action: {chunk_size} future frames ({chunk_size/dataset_fps:.2f}s @ {dataset_fps}fps)")
 
-    # 当前任务数据集（使用delta_timestamps和优化的视频后端）
-    video_backend = get_optimal_video_backend()
-    print(f"🎬 Using video backend: {video_backend}")
-    if video_backend == "torchcodec":
-        print("   ✅ torchcodec available - faster video decoding enabled")
-    else:
-        print("   ⚠️  torchcodec not available - using pyav (slower)")
-        print("   💡 Install torchcodec to improve video decoding performance")
-
+    # 当前任务数据集（使用delta_timestamps，lerobot会自动选择最优视频后端）
     current_dataset = LeRobotDataset(
         task_cfg.task.data.repoid,
         root=task_cfg.task.data.root,
@@ -464,9 +455,17 @@ def create_mixed_dataloader(
             task_cfg.task.data.episodes_to_use[0],
             task_cfg.task.data.episodes_to_use[1] + 1
         )),
-        delta_timestamps=delta_timestamps,
-        video_backend=video_backend  # 优化：使用最优视频后端
+        delta_timestamps=delta_timestamps
+        # 注意：不显式指定video_backend，lerobot会自动选择最优后端（torchcodec如果可用）
     )
+
+    # 显示实际使用的视频后端
+    print(f"🎬 Video backend: {current_dataset.video_backend}")
+    if current_dataset.video_backend == "torchcodec":
+        print("   ✅ Using torchcodec - fast video decoding enabled")
+    else:
+        print("   ⚠️  Using pyav (torchcodec not available)")
+        print("   💡 Install torchcodec: pip install torchcodec==0.5")
 
     print(f"📊 Current Task {task_id} Dataset: {len(current_dataset)} frames")
 
@@ -628,8 +627,8 @@ def validate_all_tasks(
             task_cfg.task.data.repoid,
             root=task_cfg.task.data.root,
             episodes=val_episodes,
-            delta_timestamps=delta_timestamps,
-            video_backend=get_optimal_video_backend()  # 优化：使用最优视频后端
+            delta_timestamps=delta_timestamps
+            # 注意：不显式指定video_backend，lerobot会自动选择最优后端
         )
 
         val_loader = create_dataloader_with_language(
