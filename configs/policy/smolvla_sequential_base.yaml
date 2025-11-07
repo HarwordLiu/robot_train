@@ -59,7 +59,7 @@ policy:
   # Flow Matching配置
   num_steps: 10 # 采样精度
   chunk_size: 50 # chunk的步数
-  n_action_steps: 10 # 重新观测和规划的步数
+  n_action_steps: 30 # 重新观测和规划的步数
 
   # 归一化配置
   normalization_mapping:
