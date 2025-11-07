@@ -14,7 +14,7 @@ task:
 
   # 数据配置
   data:
-    root: '/root/robot/data/task-3/1-2000/'
+    root: '/robot/data/task-3/lerobot/1-1000'
     repoid: 'lerobot/task3_placement'
     episodes_to_use: [0, 99]
 
