@@ -7,16 +7,16 @@ task:
   stage: 3 # Stage 3: 从任务2模型继续
 
   # 任务描述（中文）
-  description: '机器人需要对三个日化瓶进行翻面定姿摆放。依次拾取两个标签朝下的瓶子，翻转后精确放置在各自的目标位置，确保标签朝向正确；再拾取一个标签朝上的瓶子，调整后精确放置并确保标签朝向正确。所有瓶子需满足：瓶口位于黄色区域外部，瓶身大部分位于黄色区域内部，标签面朝上。'
+  description: '机器人需要识别并处理桌面上的三个随机摆放的物体（其中两个反面，一个正面）。对于反面的物体，机器人需要拾取、翻面并运送到目标区域，确保物体正面朝上（正面轴-y与世界z轴偏差不超过10度）；对于正面的物体，机器人只需拾取并运送到目标区域，保持正面朝上。所有物体的中心位置必须位于目标区域内，且物体保持在桌面上。'
 
   # Language Instruction（英文）
-  language_instruction: 'Flip and place three daily chemical bottles with precise position and orientation control. First grasp two bottles with labels facing down, flip them and place at their target positions with labels facing up correctly. Then grasp one bottle with label facing up, adjust and place at target position with correct label orientation. All bottles must satisfy: bottle mouth outside the yellow area, most of the bottle body inside the yellow area, label facing up.'
+  language_instruction: 'Identify and handle three randomly placed objects on the table (two facing down, one facing up). For objects facing down, grasp, flip and transport them to the target area with the front side facing up (front axis -y within 10 degrees of world z-axis). For the object facing up, grasp and transport it to the target area while maintaining its upward orientation. All objects must have their center within the target area and remain on the table surface.'
 
   # 数据配置
   data:
     root: '/root/robot/data/task-3/1-2000/'
     repoid: 'lerobot/task3_placement'
-    episodes_to_use: [0, 199]
+    episodes_to_use: [0, 999]
 
   # 训练配置（方案A：单任务专用模型）
   training:
