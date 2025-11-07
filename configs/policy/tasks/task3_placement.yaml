@@ -16,7 +16,7 @@ task:
   data:
     root: '/root/robot/data/task-3/lerobot/1-1000'
     repoid: 'lerobot/task3_placement'
-    episodes_to_use: [0, 99]
+    episodes_to_use: [0, 999]
 
   # 训练配置（方案A：单任务专用模型）
   training:
