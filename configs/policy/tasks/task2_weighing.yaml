@@ -30,7 +30,7 @@ task:
     policy:
       optimizer_lr: 0.0001 # 1e-4, SmolVLA默认学习率
       scheduler_warmup_steps: 1000 # SmolVLA默认值
-      scheduler_decay_steps: 30000 # SmolVLA默认值
+      scheduler_decay_steps: 100000 # SmolVLA默认值
 
 
   # Replay配置（方案A：不使用replay，单任务专用）
