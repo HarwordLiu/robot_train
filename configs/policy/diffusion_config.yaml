@@ -10,7 +10,7 @@ method: 'diffusion_bs64_usedepth_nofuse' # 自定义方法名称
 timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
 episodes_to_use:
   - 0
-  - 199 # 限制使用的episodes数量，[start, end]格式
+  - 999 # 限制使用的episodes数量，[start, end]格式
 # 训练时模型参数的保存目录在outputs/train/<task>/<method>/<timestamp>中
 repoid: 'lerobot/${task}' # lerobot新版本需指定这个，仅供参考，设置了即可
 root: '/root/robot/data/task1/data/lerobot/1-400/' # 你的本地转换好的lerobot数据的目录
@@ -29,8 +29,8 @@ training:
   accumulation_steps: 1 # 梯度累积步数，自定义
   ema_power: 0.75 # 如果使用ema移动指数平均方法可使用这个参数，目前测试使用ema会掉性能，所以代码中不再支持
 
-  batch_size: 96 # 批次大小
-  num_workers: 16 # dataloader的num_workers
+  batch_size: 64 # 批次大小
+  num_workers: 14 # dataloader的num_workers
   drop_last: False # 是否丢弃最后一个不完整的batch
 
   # 最大训练步数，用于控制学习率调整器，如果指定了 `max_training_step`，则它将优先生效，否则，该值将根据上述的 `max_epoch` 自动确定。
@@ -38,8 +38,8 @@ training:
   max_training_step: null
 
   # resume training，断点续训
-  resume: True
-  resume_timestamp: 'run_20251011_112255' # 若开启，将从outputs/train/<task>/<method>/<resume_timestamp>中加载最后一个epoch参数续训
+  resume: False
+  resume_timestamp: '' # 若开启，将从outputs/train/<task>/<method>/<resume_timestamp>中加载最后一个epoch参数续训
 
   # 数据增广相关的配置
   RGB_Augmenter:
