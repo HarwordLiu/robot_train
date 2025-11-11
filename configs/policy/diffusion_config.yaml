@@ -5,7 +5,7 @@ hydra: # Hydra 配置文件保存目录，仅供参数检查使用
     dir: ./outputs/train_hydra_save/multirun/${now:%Y%m%d_%H%M%S} # sweep并行时的根目录
     subdir: ${hydra:job.override_dirname}
 
-task: 'task_300_episodes' # 自定义任务名称，如果不使用本地数据想使用huggingface官方数据，请指定，例如pusht，aloha_sim_insertion_human等
+task: 'task_1000_episodes' # 自定义任务名称，如果不使用本地数据想使用huggingface官方数据，请指定，例如pusht，aloha_sim_insertion_human等
 method: 'diffusion_bs64_usedepth_nofuse' # 自定义方法名称
 timestamp: ${now:%Y%m%d_%H%M%S} # 自动获取的运行时时间戳
 episodes_to_use:
